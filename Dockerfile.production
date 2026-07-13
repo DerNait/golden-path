@@ -1,0 +1,38 @@
+FROM php:8.3-fpm-bookworm
+
+ARG WWWGROUP=1000
+ARG WWWUSER=1000
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpng-dev libjpeg62-turbo-dev libfreetype6-dev libzip-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j"$(nproc)" pdo_mysql bcmath gd zip opcache \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --force -g "${WWWGROUP}" golden \
+    && useradd --no-create-home --no-user-group -g "${WWWGROUP}" -u "${WWWUSER}" golden
+
+WORKDIR /var/www
+
+COPY docker/php/production.ini /usr/local/etc/php/conf.d/zz-golden-path.ini
+COPY app /var/www/app
+COPY bootstrap /var/www/bootstrap
+COPY config /var/www/config
+COPY database /var/www/database
+COPY public /var/www/public
+COPY resources /var/www/resources
+COPY routes /var/www/routes
+COPY storage /var/www/storage
+COPY artisan composer.json composer.lock /var/www/
+COPY .build/production/vendor /var/www/vendor
+
+RUN rm -f public/hot public/storage bootstrap/cache/*.php \
+    && mkdir -p storage/app/public storage/framework/cache/data storage/framework/sessions \
+        storage/framework/views storage/logs bootstrap/cache \
+    && ln -s ../storage/app/public public/storage \
+    && php artisan package:discover --ansi \
+    && chown -R golden:golden storage bootstrap/cache
+
+USER golden
+
+EXPOSE 9000
+CMD ["php-fpm"]
