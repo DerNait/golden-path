@@ -15,5 +15,12 @@ api.interceptors.response.use(
   },
 );
 
-export const csrf = () => axios.get('/sanctum/csrf-cookie', { withCredentials: true });
+export const csrf = () => {
+  // Remove a legacy host-only token before Laravel sets the domain cookie.
+  // Keeping both under the same name makes Axios and PHP select different
+  // values and produces a CSRF mismatch even after refreshing the token.
+  document.cookie = 'XSRF-TOKEN=; Max-Age=0; path=/; Secure; SameSite=Lax';
+
+  return axios.get('/sanctum/csrf-cookie', { withCredentials: true });
+};
 export default api;
