@@ -19,7 +19,7 @@ docker compose \
     --env-file "${BASE_DIR}/shared/deploy.env" \
     -f "${COMPOSE_FILE}" \
     exec -T mysql sh -c \
-    'exec mysqldump --single-transaction --quick --lock-tables=false -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' \
+    'exec mysqldump --single-transaction --quick --lock-tables=false --no-tablespaces -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' \
     | gzip -9 > "${BACKUP_DIR}/mysql-${STAMP}.sql.gz"
 
 tar -C "${BASE_DIR}/shared/storage/app" -czf \
