@@ -64,7 +64,7 @@ docker compose \
 
 ln -sfn "${RELEASE_DIR}" "${BASE_DIR}/current"
 rm -f "${BASE_DIR}/current/public/storage"
-ln -s ../../shared/storage/app/public "${BASE_DIR}/current/public/storage"
+mkdir -p "${BASE_DIR}/current/public/storage"
 
 compose=(docker compose --env-file "${BASE_DIR}/shared/.env" --env-file "${BASE_DIR}/shared/deploy.env" -f "${BASE_DIR}/current/docker-compose.production.yml")
 "${compose[@]}" up -d --remove-orphans

@@ -36,5 +36,8 @@ class AuthenticationTest extends TestCase
     public function test_protected_routes_require_authentication(): void
     {
         $this->getJson('/api/dashboard')->assertUnauthorized();
+        $this->get('/api/dashboard')
+            ->assertUnauthorized()
+            ->assertJsonPath('message', 'No autenticado.');
     }
 }
