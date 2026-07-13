@@ -196,13 +196,15 @@ Los entrenamientos duran entre 60 y 85 minutos, con maximo orientativo de 90. El
 `ProgressionService` consulta exclusivamente exposiciones del ejercicio realizado:
 
 1. Las primeras dos exposiciones son calibracion.
-2. Dentro del rango mantiene carga y busca una o dos repeticiones totales adicionales.
-3. Al dominar todas las series con RIR suficiente recomienda el siguiente incremento.
+2. Dentro del rango mantiene carga y guarda una meta explicita de una o dos repeticiones totales adicionales para la siguiente exposicion.
+3. Al dominar todas las series solo recomienda el siguiente incremento cuando todas tienen RIR registrado, el RIR promedio es suficiente y la carga es consistente.
 4. Una sesion mala aislada no reduce carga.
-5. Dos exposiciones bajo rango pueden recomendar una reduccion conservadora.
+5. Dos exposiciones comparables bajo rango pueden recomendar una reduccion conservadora.
 6. Una caida fuerte con descanso corto prioriza aumentar descanso.
-7. Cuatro exposiciones sin mejora generan una advertencia de posible estancamiento.
-8. Una sesion atipica reduce confianza y nunca basta por si sola para bajar carga.
+7. Cuatro exposiciones sin mejora generan revision manual; una descarga solo se sugiere si tambien hay senales repetidas de recuperacion baja.
+8. Sueno, energia, motivacion, dificultad, tecnica y molestias reducen la confianza o bloquean aumentos automaticos cuando corresponde.
+9. Una sesion atipica reduce confianza y nunca basta por si sola para bajar carga.
+10. Al generarse una recomendacion nueva, las pendientes anteriores del mismo ejercicio quedan reemplazadas y ya no pueden aplicarse.
 
 Las recomendaciones requieren aceptar, ignorar o modificar. Las sesiones pasadas nunca cambian.
 

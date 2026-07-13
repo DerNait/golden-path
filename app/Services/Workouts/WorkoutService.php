@@ -2,6 +2,7 @@
 
 namespace App\Services\Workouts;
 
+use App\Enums\RecommendationStatus;
 use App\Models\Exercise;
 use App\Models\ProgressionRecommendation;
 use App\Models\RoutineDay;
@@ -82,6 +83,10 @@ class WorkoutService
                 foreach ($session->exercises as $performed) {
                     if (! $performed->sets->where('completed',true)->where('set_type','working')->count()) continue;
                     $data = $this->progression->recommend($user,$performed->performedExercise,$performed->routineExercise);
+                    ProgressionRecommendation::where('user_id',$user->id)
+                        ->where('exercise_id',$performed->performed_exercise_id)
+                        ->where('status',RecommendationStatus::Pending->value)
+                        ->update(['status'=>RecommendationStatus::Superseded->value]);
                     ProgressionRecommendation::create(array_merge($data, [
                         'user_id'=>$user->id,'exercise_id'=>$performed->performed_exercise_id,
                         'routine_exercise_id'=>$performed->routine_exercise_id,'source_workout_session_id'=>$session->id,

@@ -6,4 +6,5 @@ enum RecommendationStatus: string
     case Accepted = 'accepted';
     case Ignored = 'ignored';
     case Modified = 'modified';
+    case Superseded = 'superseded';
 }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ProgressionRecommendation;
 use App\Models\RoutineDay;
 use App\Models\User;
 use App\Models\WorkoutSession;
@@ -90,5 +91,36 @@ class WorkoutFlowTest extends TestCase
         $historical=$this->getJson("/api/workouts/{$started['id']}")->assertOk()->json('data');
         $this->assertSame($originalSets,$historical['exercises'][0]['planned']['target_sets']);
         $this->assertSame($finished['routine_snapshot'],$historical['routine_snapshot']);
+    }
+
+    public function test_new_recommendation_supersedes_pending_recommendations_for_the_same_exercise(): void
+    {
+        $day=RoutineDay::where('day_type','training')->firstOrFail();
+        $started=$this->postJson('/api/workouts/start',['routine_day_id'=>$day->id])->assertCreated()->json('data');
+        $exercise=$started['exercises'][0];
+        $old=ProgressionRecommendation::create([
+            'user_id'=>$this->user->id,
+            'exercise_id'=>$exercise['performed_exercise']['id'],
+            'routine_exercise_id'=>$exercise['planned']['id'],
+            'recommendation_type'=>'maintain',
+            'current_weight'=>20,
+            'weight_unit'=>'kg',
+            'reason'=>'Recomendacion anterior.',
+            'confidence'=>'medium',
+            'status'=>'pending',
+        ]);
+
+        $this->postJson("/api/workout-exercises/{$exercise['id']}/sets",[
+            'set_number'=>1,'set_type'=>'working','weight'=>20,'weight_unit'=>'kg','repetitions'=>8,'rir'=>2,'completed'=>true,
+        ])->assertCreated();
+        $this->postJson("/api/workouts/{$started['id']}/finish",[])->assertOk();
+
+        $this->assertSame('superseded',$old->fresh()->status);
+        $this->assertDatabaseHas('progression_recommendations',[
+            'user_id'=>$this->user->id,
+            'exercise_id'=>$exercise['performed_exercise']['id'],
+            'source_workout_session_id'=>$started['id'],
+            'status'=>'pending',
+        ]);
     }
 }

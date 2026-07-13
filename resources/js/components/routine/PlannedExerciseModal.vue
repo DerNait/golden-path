@@ -3,7 +3,7 @@ import { reactive, watch } from 'vue';
 import BaseModal from '../common/BaseModal.vue';
 const props=defineProps({open:Boolean,item:Object}); const emit=defineEmits(['close','save','remove']);
 const form=reactive({});
-watch(()=>props.item,(item)=>Object.assign(form,item?{priority:item.priority,target_sets:item.target_sets,minimum_reps:item.minimum_reps,maximum_reps:item.maximum_reps,progression_target_reps:item.progression_target_reps,target_duration_seconds:item.target_duration_seconds,target_weight:item.target_weight,weight_unit:item.weight_unit,target_rir_min:item.target_rir_min,target_rir_max:item.target_rir_max,rest_seconds:item.rest_seconds,weight_increment:item.weight_increment,progression_type:item.progression_type,superset_group:item.superset_group,notes:item.notes}:{}),{immediate:true});
+watch(()=>props.item,(item)=>Object.assign(form,item?{priority:item.priority,target_sets:item.target_sets,minimum_reps:item.minimum_reps,maximum_reps:item.maximum_reps,progression_target_reps:item.progression_target_reps,progression_target_total_reps:item.progression_target_total_reps,target_duration_seconds:item.target_duration_seconds,target_weight:item.target_weight,weight_unit:item.weight_unit,target_rir_min:item.target_rir_min,target_rir_max:item.target_rir_max,rest_seconds:item.rest_seconds,weight_increment:item.weight_increment,progression_type:item.progression_type,superset_group:item.superset_group,notes:item.notes}:{}),{immediate:true});
 </script>
 <template>
   <BaseModal :open="open" :title="item?.exercise?.name || 'Editar ejercicio'" @close="$emit('close')">
@@ -13,6 +13,7 @@ watch(()=>props.item,(item)=>Object.assign(form,item?{priority:item.priority,tar
       <div><label class="form-label">Repeticiones minimas</label><input v-model.number="form.minimum_reps" class="form-control" type="number" min="0"/></div>
       <div><label class="form-label">Repeticiones maximas</label><input v-model.number="form.maximum_reps" class="form-control" type="number" min="0"/></div>
       <div><label class="form-label">Meta para progresar</label><input v-model.number="form.progression_target_reps" class="form-control" type="number" min="0"/></div>
+      <div><label class="form-label">Meta total proxima sesion</label><input v-model.number="form.progression_target_total_reps" class="form-control" type="number" min="0" placeholder="Se calcula al aceptar"/></div>
       <div><label class="form-label">Peso objetivo</label><div class="input-group"><input v-model.number="form.target_weight" class="form-control" type="number" min="0" step="0.25" placeholder="Por calibrar"/><select v-model="form.weight_unit" class="form-select" style="max-width:90px"><option value="kg">kg</option><option value="lb">lb</option></select></div></div>
       <div><label class="form-label">RIR objetivo</label><div class="field-row"><input v-model.number="form.target_rir_min" class="form-control" type="number" min="0" max="5"/><input v-model.number="form.target_rir_max" class="form-control" type="number" min="0" max="5"/></div></div>
       <div><label class="form-label">Descanso (segundos)</label><input v-model.number="form.rest_seconds" class="form-control" type="number" min="0" max="900" required/></div>

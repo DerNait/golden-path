@@ -13,7 +13,7 @@ import { errorMessage } from '../utils/errors';
 
 const router=useRouter(); const notifications=useNotificationStore(); const routine=ref(null); const exercises=ref([]); const loading=ref(true); const tab=ref('week'); const quickMode=ref(false);
 const plannedOpen=ref(false); const detailOpen=ref(false); const detailExercise=ref(null); const selectedItem=ref(null); const selectedDay=ref(null); const dayOpen=ref(false); const addOpen=ref(false); const routineOpen=ref(false);
-const dayForm=reactive({}); const addForm=reactive({exercise_id:null,priority:'essential',target_sets:3,minimum_reps:8,maximum_reps:12,progression_target_reps:12,target_duration_seconds:null,target_weight:null,weight_unit:'kg',target_rir_min:1,target_rir_max:2,rest_seconds:120,weight_increment:2.5,progression_type:'double_progression',superset_group:null,notes:null});
+const dayForm=reactive({}); const addForm=reactive({exercise_id:null,priority:'essential',target_sets:3,minimum_reps:8,maximum_reps:12,progression_target_reps:12,progression_target_total_reps:null,target_duration_seconds:null,target_weight:null,weight_unit:'kg',target_rir_min:1,target_rir_max:2,rest_seconds:120,weight_increment:2.5,progression_type:'double_progression',superset_group:null,notes:null});
 const routineForm=reactive({name:'',description:''});
 async function load(){ loading.value=true; try { routine.value=(await api.get('/routine')).data.data; const response=await api.get('/exercises',{params:{per_page:100}}); exercises.value=response.data.data; } catch(e){ notifications.push(errorMessage(e),'error'); } finally { loading.value=false; } }
 function editPlanned(item,day){ selectedItem.value=item; selectedDay.value=day; plannedOpen.value=true; }

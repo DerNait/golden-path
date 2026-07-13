@@ -71,10 +71,26 @@ class ProgressionServiceTest extends TestCase
         $this->assertSame('increase_rest',$this->service->recommend($this->user,$this->exercise,$this->planned)['recommendation_type']);
     }
 
-    public function test_four_unchanged_exposures_flag_stagnation(): void
+    public function test_four_unchanged_exposures_without_recovery_signals_require_manual_review(): void
     {
         for($i=0;$i<4;$i++) $this->exposure([8,8,8],[1,1,1]);
+        $this->assertSame('manual_review',$this->service->recommend($this->user,$this->exercise,$this->planned)['recommendation_type']);
+    }
+
+    public function test_stagnation_with_repeated_recovery_signals_can_suggest_deload(): void
+    {
+        for($i=0;$i<4;$i++) $this->exposure([8,8,8],[1,1,1],false,[150,150,150],['energy_level'=>2]);
         $this->assertSame('possible_deload',$this->service->recommend($this->user,$this->exercise,$this->planned)['recommendation_type']);
+    }
+
+    public function test_progress_inside_the_four_exposure_window_is_not_stagnation(): void
+    {
+        $this->exposure([8,8,8],[1,1,1]);
+        $this->exposure([9,9,9],[1,1,1]);
+        $this->exposure([10,9,9],[1,1,1]);
+        $this->exposure([9,9,9],[1,1,1]);
+
+        $this->assertSame('increase_repetitions',$this->service->recommend($this->user,$this->exercise,$this->planned)['recommendation_type']);
     }
 
     public function test_same_repetitions_with_better_rir_counts_as_progress(): void
@@ -95,6 +111,43 @@ class ProgressionServiceTest extends TestCase
         $this->assertNull($result['suggested_weight']);
     }
 
+    public function test_mastered_repetitions_do_not_raise_weight_when_rir_is_missing(): void
+    {
+        $this->exposure([8,8,8],[1,1,1]);
+        $this->exposure([10,10,10],[null,null,null]);
+        $result=$this->service->recommend($this->user,$this->exercise,$this->planned);
+        $this->assertSame('maintain',$result['recommendation_type']);
+        $this->assertSame('low',$result['confidence']);
+        $this->assertNull($result['suggested_weight']);
+    }
+
+    public function test_mastered_repetitions_do_not_raise_weight_with_low_recovery(): void
+    {
+        $this->exposure([8,8,8],[1,1,1]);
+        $this->exposure([10,10,10],[2,2,2],false,[150,150,150],['sleep_hours'=>5,'energy_level'=>2]);
+        $result=$this->service->recommend($this->user,$this->exercise,$this->planned);
+        $this->assertSame('maintain',$result['recommendation_type']);
+        $this->assertSame('low',$result['confidence']);
+        $this->assertNull($result['suggested_weight']);
+    }
+
+    public function test_inconsistent_working_load_requires_manual_review(): void
+    {
+        $this->exposure([8,8,8]);
+        $this->exposure([9,9,9],[2,2,2],false,[150,150,150],[],[20,22.5,20]);
+        $this->assertSame('manual_review',$this->service->recommend($this->user,$this->exercise,$this->planned)['recommendation_type']);
+    }
+
+    public function test_mastered_bodyweight_exercise_requires_manual_progression_choice(): void
+    {
+        $this->planned=RoutineExercise::whereHas('exercise',fn ($query)=>$query->where('metric_type','bodyweight_reps'))->with('exercise')->firstOrFail();
+        $this->exercise=$this->planned->exercise;
+        $target=(int) $this->planned->progression_target_reps;
+        $this->exposure([$target,$target,$target],[2,2,2]);
+        $this->exposure([$target,$target,$target],[2,2,2]);
+        $this->assertSame('manual_review',$this->service->recommend($this->user,$this->exercise,$this->planned)['recommendation_type']);
+    }
+
     public function test_one_bad_exposure_maintains_weight_before_reducing(): void
     {
         $this->exposure([8,8,8],[2,2,2]);
@@ -112,11 +165,11 @@ class ProgressionServiceTest extends TestCase
         $this->assertSame('calibrate',$this->service->recommend($this->user,$alternative,$this->planned)['recommendation_type']);
     }
 
-    private function exposure(array $repetitions, array $rirs=[2,2,2], bool $atypical=false, array $rests=[150,150,150]): WorkoutExercise
+    private function exposure(array $repetitions, array $rirs=[2,2,2], bool $atypical=false, array $rests=[150,150,150], array $sessionData=[], array $weights=[20,20,20]): WorkoutExercise
     {
-        $session=$this->user->workouts()->create(['routine_id'=>$this->planned->routineDay->routine_id,'routine_day_id'=>$this->planned->routine_day_id,'name'=>'Test','started_at'=>now(),'finished_at'=>now(),'status'=>'completed','is_atypical'=>$atypical]);
+        $session=$this->user->workouts()->create(array_merge(['routine_id'=>$this->planned->routineDay->routine_id,'routine_day_id'=>$this->planned->routine_day_id,'name'=>'Test','started_at'=>now(),'finished_at'=>now(),'status'=>'completed','is_atypical'=>$atypical],$sessionData));
         $performed=$session->exercises()->create(['planned_exercise_id'=>$this->exercise->id,'performed_exercise_id'=>$this->exercise->id,'routine_exercise_id'=>$this->planned->id,'position'=>1,'planned_snapshot_json'=>$this->planned->toArray()]);
-        foreach($repetitions as $index=>$reps) $performed->sets()->create(['set_number'=>$index+1,'set_type'=>'working','weight'=>20,'weight_unit'=>'kg','repetitions'=>$reps,'rir'=>$rirs[$index]??1,'rest_seconds_actual'=>$rests[$index]??150,'completed'=>true,'completed_at'=>now()]);
+        foreach($repetitions as $index=>$reps) $performed->sets()->create(['set_number'=>$index+1,'set_type'=>'working','weight'=>$weights[$index]??20,'weight_unit'=>'kg','repetitions'=>$reps,'rir'=>array_key_exists($index,$rirs)?$rirs[$index]:1,'rest_seconds_actual'=>$rests[$index]??150,'completed'=>true,'completed_at'=>now()]);
         return $performed;
     }
 }

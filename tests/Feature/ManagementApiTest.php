@@ -163,11 +163,12 @@ class ManagementApiTest extends TestCase
         $modified=$this->recommendation($planned,['suggested_weight'=>24]);
         $this->postJson("/api/progression/recommendations/{$modified->id}/modify",[
             'suggested_weight'=>25,
-            'suggested_total_repetitions'=>9,
+            'suggested_total_repetitions'=>27,
         ])->assertOk()->assertJsonPath('data.status','modified');
         $planned->refresh();
         $this->assertSame('25.00',$planned->target_weight);
-        $this->assertSame(9,$planned->progression_target_reps);
+        $this->assertSame(27,$planned->progression_target_total_reps);
+        $this->assertSame(10,$planned->progression_target_reps);
         $this->assertNotNull($modified->fresh()->accepted_at);
     }
 

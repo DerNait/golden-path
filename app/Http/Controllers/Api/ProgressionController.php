@@ -31,9 +31,12 @@ class ProgressionController extends Controller
             $recommendation=$this->lockPending($recommendation);
             if ($recommendation->routineExercise) {
                 $changes=[];
-                if ($recommendation->suggested_weight!==null) $changes['target_weight']=$recommendation->suggested_weight;
+                if ($recommendation->suggested_weight!==null) {
+                    $changes['target_weight']=$recommendation->suggested_weight;
+                    $changes['progression_target_total_reps']=$recommendation->routineExercise->target_sets * $recommendation->routineExercise->minimum_reps;
+                }
                 if ($recommendation->suggested_total_repetitions!==null) {
-                    $changes['progression_target_reps']=min($recommendation->routineExercise->maximum_reps,$recommendation->suggested_total_repetitions);
+                    $changes['progression_target_total_reps']=$this->clampTotalRepetitions($recommendation,$recommendation->suggested_total_repetitions);
                 }
                 if ($changes) $recommendation->routineExercise->update($changes);
             }
@@ -65,9 +68,12 @@ class ProgressionController extends Controller
             $recommendation=$this->lockPending($recommendation);
             if ($recommendation->routineExercise) {
                 $changes=[];
-                if (($data['suggested_weight']??null)!==null) $changes['target_weight']=$data['suggested_weight'];
+                if (($data['suggested_weight']??null)!==null) {
+                    $changes['target_weight']=$data['suggested_weight'];
+                    $changes['progression_target_total_reps']=$recommendation->routineExercise->target_sets * $recommendation->routineExercise->minimum_reps;
+                }
                 if (($data['suggested_total_repetitions']??null)!==null) {
-                    $changes['progression_target_reps']=min($recommendation->routineExercise->maximum_reps,$data['suggested_total_repetitions']);
+                    $changes['progression_target_total_reps']=$this->clampTotalRepetitions($recommendation,$data['suggested_total_repetitions']);
                 }
                 if ($changes) $recommendation->routineExercise->update($changes);
             }
@@ -84,5 +90,14 @@ class ProgressionController extends Controller
             throw ValidationException::withMessages(['recommendation'=>'La recomendacion ya fue procesada.']);
         }
         return $locked;
+    }
+
+    private function clampTotalRepetitions(ProgressionRecommendation $recommendation, int $total): int
+    {
+        $planned=$recommendation->routineExercise;
+        $minimum=$planned->target_sets * $planned->minimum_reps;
+        $maximum=$planned->target_sets * $planned->maximum_reps;
+
+        return min($maximum,max($minimum,$total));
     }
 }
