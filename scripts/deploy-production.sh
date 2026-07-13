@@ -68,15 +68,15 @@ ln -s ../../shared/storage/app/public "${BASE_DIR}/current/public/storage"
 
 compose=(docker compose --env-file "${BASE_DIR}/shared/.env" --env-file "${BASE_DIR}/shared/deploy.env" -f "${BASE_DIR}/current/docker-compose.production.yml")
 "${compose[@]}" up -d --remove-orphans
-"${compose[@]}" exec -T app php artisan migrate --force
+"${compose[@]}" exec -T app php artisan migrate --force </dev/null
 
 if [[ ! -f "${BASE_DIR}/shared/.seeded" ]]; then
-    "${compose[@]}" exec -T app php artisan db:seed --force
+    "${compose[@]}" exec -T app php artisan db:seed --force </dev/null
     touch "${BASE_DIR}/shared/.seeded"
     chmod 600 "${BASE_DIR}/shared/.seeded"
 fi
 
-"${compose[@]}" exec -T app php artisan optimize
+"${compose[@]}" exec -T app php artisan optimize </dev/null
 "${compose[@]}" ps
 
 printf '%s\n' '17 3 * * * root /var/www/golden-path/current/scripts/backup-production.sh >> /var/log/golden-path-backup.log 2>&1' \

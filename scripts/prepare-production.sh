@@ -36,9 +36,10 @@ docker run --rm \
 
 echo "[3/5] Preparing production Composer dependencies"
 rm -rf .build/production
-mkdir -p .build/production/app
+mkdir -p .build/production/app .build/production/database
 cp composer.json composer.lock .build/production/
 cp -R app/. .build/production/app/
+cp -R database/. .build/production/database/
 docker run --rm \
     --user "$(id -u):$(id -g)" \
     --env HOME=/tmp \
@@ -56,6 +57,8 @@ docker buildx build \
     .
 
 test "$(docker image inspect "${IMAGE_NAME}" --format '{{.Architecture}}')" = "amd64"
+docker run --rm "${IMAGE_NAME}" php -r \
+    'require "vendor/autoload.php"; exit(class_exists("Database\\Seeders\\DatabaseSeeder") ? 0 : 1);'
 
 echo "[5/5] Exporting image"
 mkdir -p "${ARTIFACT_DIR}"
