@@ -5,6 +5,6 @@ const browser=await chromium.launch({headless:true}); const context=await browse
 await page.goto(`${baseUrl}/login`); await page.getByLabel('Correo').fill(email); await page.getByLabel('Contrasena').fill(password);
 const loginResponse=await Promise.all([page.waitForResponse(response=>response.url().endsWith('/api/login')),page.getByRole('button',{name:'Iniciar sesion'}).click()]);
 await page.waitForURL(`${baseUrl}/`); const cookies=await context.cookies();
-const me=await context.request.get(`${baseUrl}/api/me`);
-console.log(JSON.stringify({loginStatus:loginResponse[0].status(),cookies:cookies.map(cookie=>({name:cookie.name,domain:cookie.domain,path:cookie.path,sameSite:cookie.sameSite,secure:cookie.secure})),meStatus:me.status(),meBody:await me.text()},null,2));
+const me=await page.evaluate(async()=>{const response=await fetch('/api/me',{headers:{Accept:'application/json'}});return {status:response.status,body:await response.text()};});
+console.log(JSON.stringify({loginStatus:loginResponse[0].status(),cookies:cookies.map(cookie=>({name:cookie.name,domain:cookie.domain,path:cookie.path,sameSite:cookie.sameSite,secure:cookie.secure})),meStatus:me.status,meBody:me.body},null,2));
 await browser.close();
