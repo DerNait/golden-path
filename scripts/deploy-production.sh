@@ -67,7 +67,10 @@ rm -f "${BASE_DIR}/current/public/storage"
 mkdir -p "${BASE_DIR}/current/public/storage"
 
 compose=(docker compose --env-file "${BASE_DIR}/shared/.env" --env-file "${BASE_DIR}/shared/deploy.env" -f "${BASE_DIR}/current/docker-compose.production.yml")
-"${compose[@]}" up -d --remove-orphans
+# Bind mounts that pass through the `current` symlink are resolved when the
+# container is created. Recreate app and nginx so every release reads the new
+# code and public assets instead of retaining the previous symlink target.
+"${compose[@]}" up -d --remove-orphans --force-recreate app nginx
 "${compose[@]}" exec -T app php artisan migrate --force </dev/null
 
 if [[ ! -f "${BASE_DIR}/shared/.seeded" ]]; then
