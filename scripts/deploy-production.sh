@@ -57,6 +57,18 @@ cd "${BASE_DIR}/images"
 sha256sum -c "$(basename "${ARTIFACT}").sha256"
 gzip -dc "${ARTIFACT}" | docker load
 
+if ! grep -q '^VAPID_PRIVATE_KEY=.' "${BASE_DIR}/shared/.env"; then
+    mapfile -t VAPID_KEYS < <(docker run --rm "${IMAGE_NAME}" php -r 'require "/var/www/vendor/autoload.php"; $keys=Minishlink\WebPush\VAPID::createVapidKeys(); echo $keys["publicKey"], PHP_EOL, $keys["privateKey"], PHP_EOL;')
+    if [[ "${#VAPID_KEYS[@]}" -ne 2 || -z "${VAPID_KEYS[0]}" || -z "${VAPID_KEYS[1]}" ]]; then
+        echo "Could not generate VAPID keys." >&2
+        exit 1
+    fi
+    printf '\nVAPID_SUBJECT=%s\nVAPID_PUBLIC_KEY=%s\nVAPID_PRIVATE_KEY=%s\n' \
+        'mailto:darkcsjuegos1@gmail.com' "${VAPID_KEYS[0]}" "${VAPID_KEYS[1]}" \
+        >> "${BASE_DIR}/shared/.env"
+    chmod 600 "${BASE_DIR}/shared/.env"
+fi
+
 docker compose \
     --env-file "${BASE_DIR}/shared/.env" \
     --env-file "${BASE_DIR}/shared/deploy.env" \
@@ -68,9 +80,9 @@ mkdir -p "${BASE_DIR}/current/public/storage"
 
 compose=(docker compose --env-file "${BASE_DIR}/shared/.env" --env-file "${BASE_DIR}/shared/deploy.env" -f "${BASE_DIR}/current/docker-compose.production.yml")
 # Bind mounts that pass through the `current` symlink are resolved when the
-# container is created. Recreate app and nginx so every release reads the new
+# container is created. Recreate release services so they all read the new
 # code and public assets instead of retaining the previous symlink target.
-"${compose[@]}" up -d --remove-orphans --force-recreate app nginx
+"${compose[@]}" up -d --remove-orphans --force-recreate app worker nginx
 "${compose[@]}" exec -T app php artisan migrate --force </dev/null
 
 if [[ ! -f "${BASE_DIR}/shared/.seeded" ]]; then

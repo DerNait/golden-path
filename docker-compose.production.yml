@@ -5,7 +5,7 @@ services:
     image: ${APP_IMAGE:?APP_IMAGE must identify the prepared Golden Path image}
     container_name: golden-path-app
     restart: unless-stopped
-    environment:
+    environment: &app-environment
       APP_NAME: ${APP_NAME}
       APP_ENV: ${APP_ENV}
       APP_KEY: ${APP_KEY}
@@ -42,6 +42,9 @@ services:
       PERSONAL_USER_NAME: ${PERSONAL_USER_NAME}
       PERSONAL_USER_EMAIL: ${PERSONAL_USER_EMAIL}
       PERSONAL_USER_PASSWORD: ${PERSONAL_USER_PASSWORD}
+      VAPID_SUBJECT: ${VAPID_SUBJECT}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
     working_dir: /var/www
     volumes:
       - ${PRODUCTION_ROOT:-/var/www/golden-path}/shared/storage:/var/www/storage
@@ -55,6 +58,21 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks: [golden-path]
+
+  worker:
+    image: ${APP_IMAGE:?APP_IMAGE must identify the prepared Golden Path image}
+    container_name: golden-path-worker
+    restart: unless-stopped
+    command: php artisan queue:work --sleep=1 --tries=3 --timeout=60 --max-time=3600
+    environment: *app-environment
+    working_dir: /var/www
+    volumes:
+      - ${PRODUCTION_ROOT:-/var/www/golden-path}/shared/storage:/var/www/storage
+      - ${PRODUCTION_ROOT:-/var/www/golden-path}/shared/bootstrap/cache:/var/www/bootstrap/cache
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks: [golden-path]
 
   nginx:

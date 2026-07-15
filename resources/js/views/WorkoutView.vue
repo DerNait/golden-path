@@ -34,15 +34,16 @@ async function saveSet(payload,set=null){try{const result=set?await store.update
 async function removeSet(id){if(!confirm('Eliminar esta serie?'))return;try{await store.deleteSet(id);notifications.push('Serie eliminada.');}catch(e){notifications.push(errorMessage(e),'error');}}
 function copyPrevious(){const last=current.value.previous_performance?.sets?.filter(set=>set.set_type==='working').at(-1); if(!last){notifications.push('No hay una serie anterior para copiar.','error');return;} saveSet({...last,id:undefined,set_number:newSetNumber.value,completed:true,completed_at:undefined});}
 async function substitute(alternative){try{await store.substitute(current.value.id,{alternative_exercise_id:alternative.id,reason:alternative.reason||'equipment_busy'});alternativeOpen.value=false;notifications.push('Alternativa cargada con su historial independiente.');}catch(e){notifications.push(errorMessage(e),'error');}}
-async function finish(status){try{const result=await store.finish(status,feedback);finishOpen.value=false;notifications.push(status==='partial'?'Entrenamiento guardado como parcial.':`Entrenamiento completado: +${result.xp_earned} XP`);router.push({name:'history-detail',params:{id:result.id}});}catch(e){notifications.push(errorMessage(e),'error');}}
-async function cancel(){if(!confirm('Cancelar el entrenamiento? Las series registradas permaneceran en el historial.'))return;try{await store.cancel();notifications.push('Entrenamiento cancelado.');await initialize();}catch(e){notifications.push(errorMessage(e),'error');}}
+async function finish(status){try{const result=await store.finish(status,feedback);timer.value?.skip();finishOpen.value=false;notifications.push(status==='partial'?'Entrenamiento guardado como parcial.':`Entrenamiento completado: +${result.xp_earned} XP`);router.push({name:'history-detail',params:{id:result.id}});}catch(e){notifications.push(errorMessage(e),'error');}}
+async function cancel(){if(!confirm('Cancelar el entrenamiento? Las series registradas permaneceran en el historial.'))return;try{await store.cancel();timer.value?.skip();notifications.push('Entrenamiento cancelado.');await initialize();}catch(e){notifications.push(errorMessage(e),'error');}}
 function jump(direction){do{store[direction]();}while(quickMode.value&&current.value?.planned?.priority==='optional'&&((direction==='next'&&store.currentIndex<store.exerciseCount-1)||(direction==='previous'&&store.currentIndex>0)));window.scrollTo({top:0,behavior:'smooth'});}
 function applyQuickMode(){if(quickMode.value&&current.value?.planned?.priority==='optional')jump(hasNextVisible.value?'next':'previous');}
 const confidenceLabels={low:'Baja',medium:'Media',high:'Alta'};
 const confidenceLabel=value=>confidenceLabels[value]||value;
 function updateElapsed(){elapsedSeconds.value=store.session?.started_at?Math.max(0,Math.floor((Date.now()-new Date(store.session.started_at).getTime())/1000)):0;}
-onMounted(()=>{initialize();updateElapsed();elapsedTicker=setInterval(updateElapsed,1000);});
-onBeforeUnmount(()=>clearInterval(elapsedTicker));
+function reconcileElapsed(){if(!document.hidden)updateElapsed();}
+onMounted(()=>{initialize();updateElapsed();elapsedTicker=setInterval(updateElapsed,1000);document.addEventListener('visibilitychange',reconcileElapsed);window.addEventListener('focus',updateElapsed);window.addEventListener('pageshow',updateElapsed);});
+onBeforeUnmount(()=>{clearInterval(elapsedTicker);document.removeEventListener('visibilitychange',reconcileElapsed);window.removeEventListener('focus',updateElapsed);window.removeEventListener('pageshow',updateElapsed);});
 </script>
 <template>
   <div class="workout-shell">

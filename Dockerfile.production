@@ -4,9 +4,9 @@ ARG WWWGROUP=1000
 ARG WWWUSER=1000
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libpng-dev libjpeg62-turbo-dev libfreetype6-dev libzip-dev \
+        libcurl4-openssl-dev libonig-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev libzip-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j"$(nproc)" pdo_mysql bcmath gd zip opcache \
+    && docker-php-ext-install -j"$(nproc)" pdo_mysql bcmath curl mbstring gd zip opcache \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --force -g "${WWWGROUP}" golden \
     && useradd --no-create-home --no-user-group -g "${WWWGROUP}" -u "${WWWUSER}" golden

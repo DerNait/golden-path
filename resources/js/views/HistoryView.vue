@@ -7,7 +7,7 @@ import { useNotificationStore } from '../stores/notifications';
 import { errorMessage } from '../utils/errors';
 const notifications=useNotificationStore(); const sessions=ref([]); const meta=ref(null); const loading=ref(true); const filters=reactive({from:'',to:'',status:'',name:''});
 const labels={completed:'Completado',partial:'Parcial',cancelled:'Cancelado',in_progress:'En curso'};
-function duration(seconds){if(!seconds)return '-';return `${Math.floor(seconds/60)} min`;}
+function duration(seconds){const total=Math.max(0,Math.round(Number(seconds)||0));const hours=Math.floor(total/3600);const minutes=Math.floor((total%3600)/60);const secs=total%60;return hours?`${hours}:${String(minutes).padStart(2,'0')}:${String(secs).padStart(2,'0')}`:`${minutes}:${String(secs).padStart(2,'0')}`;}
 async function load(page=1){loading.value=true;try{const response=(await api.get('/workouts',{params:{...filters,page}})).data;sessions.value=response.data;meta.value=response;}catch(e){notifications.push(errorMessage(e),'error');}finally{loading.value=false;}}
 onMounted(()=>load());
 </script>

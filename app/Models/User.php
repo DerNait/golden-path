@@ -18,4 +18,6 @@ class User extends Authenticatable
     public function exercises(): \Illuminate\Database\Eloquent\Relations\HasMany { return $this->hasMany(Exercise::class); }
     public function workouts(): \Illuminate\Database\Eloquent\Relations\HasMany { return $this->hasMany(WorkoutSession::class); }
     public function gameProfile(): \Illuminate\Database\Eloquent\Relations\HasOne { return $this->hasOne(GameProfile::class); }
+    public function pushSubscriptions(): \Illuminate\Database\Eloquent\Relations\HasMany { return $this->hasMany(PushSubscription::class); }
+    public function restTimerNotifications(): \Illuminate\Database\Eloquent\Relations\HasMany { return $this->hasMany(RestTimerNotification::class); }
 }

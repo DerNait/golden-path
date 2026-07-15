@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExerciseController;
 use App\Http\Controllers\Api\GameController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\PushNotificationController;
 use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\ProgressionController;
 use App\Http\Controllers\Api\RoutineController;
@@ -23,6 +24,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::put('/profile', [ProfileController::class, 'update']);
     Route::put('/profile/password', [ProfileController::class, 'password']);
+
+    Route::get('/push/config', [PushNotificationController::class, 'config']);
+    Route::post('/push/subscriptions', [PushNotificationController::class, 'store']);
+    Route::delete('/push/subscriptions', [PushNotificationController::class, 'destroy']);
+    Route::post('/rest-timer/notifications', [PushNotificationController::class, 'scheduleRestTimer']);
+    Route::delete('/rest-timer/notifications/current', [PushNotificationController::class, 'cancelRestTimer']);
 
     Route::get('/training-phases', [TrainingPhaseController::class, 'index']);
     Route::get('/training-phases/current', [TrainingPhaseController::class, 'current']);
