@@ -111,8 +111,8 @@ class TrainingPlanSeeder extends Seeder
                 'equipment' => $config[0],
                 'weight_mode' => $config[1],
                 'metric_type' => $config[3] ?? 'weight_reps',
-                'default_weight_unit' => $hasWeight ? 'kg' : null,
-                'default_increment' => $hasWeight ? 2.5 : null,
+                'default_weight_unit' => $hasWeight ? 'lb' : null,
+                'default_increment' => $hasWeight ? 5 : null,
                 'is_active' => true,
                 'instructions' => 'Prioriza una tecnica controlada. Detente ante una molestia inusual.',
             ]);

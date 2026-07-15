@@ -29,7 +29,7 @@ class WorkoutFlowTest extends TestCase
         $this->postJson('/api/workouts/start',['routine_day_id'=>$day->id])->assertUnprocessable()->assertJsonValidationErrors('session');
         $exercise=$started['exercises'][0];
         $set=$this->postJson("/api/workout-exercises/{$exercise['id']}/sets",[
-            'set_number'=>1,'set_type'=>'working','weight'=>20,'weight_unit'=>'kg','repetitions'=>10,'rir'=>2,'completed'=>true,
+            'set_number'=>1,'set_type'=>'working','weight'=>20,'weight_unit'=>'lb','repetitions'=>10,'rir'=>2,'completed'=>true,
         ])->assertCreated()->json('set');
         $this->assertSame(200.0,(float)$set['volume']);
         $this->assertTrue($set['is_personal_record']);
@@ -54,7 +54,7 @@ class WorkoutFlowTest extends TestCase
     public function test_warmups_do_not_count_for_volume_or_records(): void
     {
         $day=RoutineDay::where('day_type','training')->firstOrFail(); $session=$this->postJson('/api/workouts/start',['routine_day_id'=>$day->id])->json('data'); $exercise=$session['exercises'][0];
-        $set=$this->postJson("/api/workout-exercises/{$exercise['id']}/sets",['set_number'=>1,'set_type'=>'warmup','weight'=>10,'weight_unit'=>'kg','repetitions'=>10,'rir'=>4,'completed'=>true])->assertCreated()->json('set');
+        $set=$this->postJson("/api/workout-exercises/{$exercise['id']}/sets",['set_number'=>1,'set_type'=>'warmup','weight'=>10,'weight_unit'=>'lb','repetitions'=>10,'rir'=>4,'completed'=>true])->assertCreated()->json('set');
         $this->assertSame(0.0,(float)$set['volume']); $this->assertFalse($set['is_personal_record']);
         $this->postJson("/api/workouts/{$session['id']}/finish",[])->assertUnprocessable()->assertJsonValidationErrors('session');
         $finished=$this->postJson("/api/workouts/{$session['id']}/mark-partial",[])->assertOk()->json('data');
@@ -104,14 +104,14 @@ class WorkoutFlowTest extends TestCase
             'routine_exercise_id'=>$exercise['planned']['id'],
             'recommendation_type'=>'maintain',
             'current_weight'=>20,
-            'weight_unit'=>'kg',
+            'weight_unit'=>'lb',
             'reason'=>'Recomendacion anterior.',
             'confidence'=>'medium',
             'status'=>'pending',
         ]);
 
         $this->postJson("/api/workout-exercises/{$exercise['id']}/sets",[
-            'set_number'=>1,'set_type'=>'working','weight'=>20,'weight_unit'=>'kg','repetitions'=>8,'rir'=>2,'completed'=>true,
+            'set_number'=>1,'set_type'=>'working','weight'=>20,'weight_unit'=>'lb','repetitions'=>8,'rir'=>2,'completed'=>true,
         ])->assertCreated();
         $this->postJson("/api/workouts/{$started['id']}/finish",[])->assertOk();
 
