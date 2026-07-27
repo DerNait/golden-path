@@ -27,6 +27,7 @@ class WorkoutSetController extends Controller
             }
             $set=$workoutExercise->sets()->create(array_merge($request->validated(),[
                 'completed_at'=>$request->boolean('completed',true)?now():null,
+                'body_weight_kg'=>$this->bodyWeightSnapshot($workoutExercise),
             ]));
             $newRecords=$set->completed && $set->set_type!=='warmup' ? $this->records->evaluate($set) : collect();
             return ['set'=>$set->fresh(),'new_records'=>$newRecords];
@@ -46,6 +47,7 @@ class WorkoutSetController extends Controller
             if ($duplicate) throw ValidationException::withMessages(['set_number'=>'Esta serie ya fue registrada.']);
             $workoutSet->update(array_merge($request->validated(),[
                 'completed_at'=>$request->boolean('completed',true)?($workoutSet->completed_at??now()):null,
+                'body_weight_kg'=>$this->bodyWeightSnapshot($workoutSet->workoutExercise),
             ]));
             $newRecords=$workoutSet->completed && $workoutSet->set_type!=='warmup' ? $this->records->evaluate($workoutSet) : collect();
             return ['set'=>$workoutSet->fresh(),'new_records'=>$newRecords];
@@ -85,5 +87,17 @@ class WorkoutSetController extends Controller
         if (($data['weight']??null)!==null && $unit && ($data['weight_unit']??null)!==$unit) {
             throw ValidationException::withMessages(['weight_unit'=>"La unidad debe ser {$unit}."]);
         }
+    }
+
+    // Snapshot the athlete's body weight (kg) so bodyweight movements count toward volume. Null for loaded lifts, keeping their volume unchanged.
+    private function bodyWeightSnapshot(WorkoutExercise $exercise): ?float
+    {
+        if (! in_array($exercise->performedExercise->metric_type, ['bodyweight_reps','bodyweight_added_weight'], true)) {
+            return null;
+        }
+        $user=$exercise->session->user;
+        $weight=$user->profile?->current_body_weight_kg
+            ?? $user->bodyMeasurements()->whereNotNull('body_weight_kg')->latest('recorded_on')->latest('id')->value('body_weight_kg');
+        return $weight!==null ? (float)$weight : null;
     }
 }

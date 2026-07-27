@@ -34,7 +34,18 @@ class ProgressController extends Controller
     {
         $measurements=$request->user()->bodyMeasurements()->oldest('recorded_on')->get();
         $profile=$request->user()->profile;
-        return response()->json(['data'=>$measurements,'summary'=>['initial_weight'=>$profile?->initial_body_weight_kg ?? $measurements->firstWhere('body_weight_kg','!=',null)?->body_weight_kg,'current_weight'=>$measurements->whereNotNull('body_weight_kg')->last()?->body_weight_kg ?? $profile?->current_body_weight_kg,'initial_waist'=>$profile?->initial_waist_cm ?? $measurements->firstWhere('waist_cm','!=',null)?->waist_cm,'current_waist'=>$measurements->whereNotNull('waist_cm')->last()?->waist_cm ?? $profile?->current_waist_cm]]);
+        $firstOf=fn (string $field)=>$measurements->firstWhere($field,'!=',null)?->{$field};
+        $lastOf=fn (string $field)=>$measurements->whereNotNull($field)->last()?->{$field};
+        return response()->json(['data'=>$measurements,'summary'=>[
+            'initial_weight'=>$profile?->initial_body_weight_kg ?? $firstOf('body_weight_kg'),
+            'current_weight'=>$lastOf('body_weight_kg') ?? $profile?->current_body_weight_kg,
+            'initial_waist'=>$profile?->initial_waist_cm ?? $firstOf('waist_cm'),
+            'current_waist'=>$lastOf('waist_cm') ?? $profile?->current_waist_cm,
+            'initial_body_fat'=>$firstOf('body_fat_percentage'),'current_body_fat'=>$lastOf('body_fat_percentage'),
+            'initial_muscle'=>$firstOf('skeletal_muscle_mass_kg'),'current_muscle'=>$lastOf('skeletal_muscle_mass_kg'),
+            'current_lean_mass'=>$lastOf('lean_mass_kg'),'current_body_water'=>$lastOf('total_body_water_kg'),
+            'current_visceral_fat'=>$lastOf('visceral_fat_level'),'current_bmr'=>$lastOf('basal_metabolic_rate_kcal'),
+        ]]);
     }
     public function exercises(Request $request): JsonResponse { return response()->json(['data'=>$request->user()->exercises()->where('is_active',true)->orderBy('name')->get(['id','name'])]); }
     public function exercise(Request $request, Exercise $exercise): JsonResponse
