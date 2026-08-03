@@ -48,7 +48,7 @@ class WorkoutFlowTest extends TestCase
         $this->assertTrue($updated['was_substituted']);
         $this->assertSame($item['planned_exercise']['id'],$updated['planned_exercise']['id']);
         $this->assertSame($alternative['id'],$updated['performed_exercise']['id']);
-        $this->assertNull($updated['previous_performance_json']);
+        $this->assertNull($updated['previous_performance']);
     }
 
     public function test_warmups_do_not_count_for_volume_or_records(): void

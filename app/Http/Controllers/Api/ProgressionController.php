@@ -7,6 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\RecommendationActionRequest;
 use App\Http\Resources\RecommendationResource;
 use App\Models\ProgressionRecommendation;
+use App\Models\RoutineExercise;
+use App\Models\User;
+use App\Services\Progression\ExerciseTargetService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -16,6 +19,8 @@ use Illuminate\Validation\ValidationException;
 
 class ProgressionController extends Controller
 {
+    public function __construct(private readonly ExerciseTargetService $targets) {}
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $filters=$request->validate(['status'=>['nullable',Rule::enum(RecommendationStatus::class)]]);
@@ -29,17 +34,7 @@ class ProgressionController extends Controller
         $this->authorize('update',$recommendation);
         $updated=DB::transaction(function () use ($recommendation): ProgressionRecommendation {
             $recommendation=$this->lockPending($recommendation);
-            if ($recommendation->routineExercise) {
-                $changes=[];
-                if ($recommendation->suggested_weight!==null) {
-                    $changes['target_weight']=$recommendation->suggested_weight;
-                    $changes['progression_target_total_reps']=$recommendation->routineExercise->target_sets * $recommendation->routineExercise->minimum_reps;
-                }
-                if ($recommendation->suggested_total_repetitions!==null) {
-                    $changes['progression_target_total_reps']=$this->clampTotalRepetitions($recommendation,$recommendation->suggested_total_repetitions);
-                }
-                if ($changes) $recommendation->routineExercise->update($changes);
-            }
+            $this->applyTarget($recommendation,$recommendation->suggested_weight,$recommendation->suggested_total_repetitions);
             $recommendation->update(['status'=>RecommendationStatus::Accepted->value,'accepted_at'=>now()]);
             return $recommendation->fresh('exercise');
         });
@@ -66,21 +61,44 @@ class ProgressionController extends Controller
         }
         $updated=DB::transaction(function () use ($recommendation,$data): ProgressionRecommendation {
             $recommendation=$this->lockPending($recommendation);
-            if ($recommendation->routineExercise) {
-                $changes=[];
-                if (($data['suggested_weight']??null)!==null) {
-                    $changes['target_weight']=$data['suggested_weight'];
-                    $changes['progression_target_total_reps']=$recommendation->routineExercise->target_sets * $recommendation->routineExercise->minimum_reps;
-                }
-                if (($data['suggested_total_repetitions']??null)!==null) {
-                    $changes['progression_target_total_reps']=$this->clampTotalRepetitions($recommendation,$data['suggested_total_repetitions']);
-                }
-                if ($changes) $recommendation->routineExercise->update($changes);
-            }
+            $this->applyTarget($recommendation,$data['suggested_weight']??null,$data['suggested_total_repetitions']??null);
             $recommendation->update(array_merge($data,['status'=>RecommendationStatus::Modified->value,'accepted_at'=>now()]));
             return $recommendation->fresh('exercise');
         });
         return response()->json(['data'=>$updated]);
+    }
+
+    /**
+     * Store the accepted target where it belongs. The routine slot is only
+     * updated when the recommendation is about the exercise that slot plans;
+     * for an alternative performed in that slot the target is kept per
+     * (exercise, number of sets) so it never overwrites the planned exercise.
+     */
+    private function applyTarget(ProgressionRecommendation $recommendation, ?float $weight, ?int $totalReps): void
+    {
+        $slot=$recommendation->routineExercise;
+        $plansThisExercise=$slot && (int) $slot->exercise_id===(int) $recommendation->exercise_id;
+        $clamped=$totalReps!==null && $slot ? $this->clampTotalRepetitions($recommendation,$totalReps) : $totalReps;
+
+        if ($plansThisExercise) {
+            $changes=[];
+            if ($weight!==null) {
+                $changes['target_weight']=$weight;
+                $changes['progression_target_total_reps']=$slot->target_sets * $slot->minimum_reps;
+            }
+            if ($clamped!==null) $changes['progression_target_total_reps']=$clamped;
+            if ($changes) $slot->update($changes);
+        }
+
+        $exercise=$recommendation->exercise;
+        if (! $exercise || ($weight===null && $clamped===null)) return;
+
+        $sets=(int) ($slot?->target_sets ?? RoutineExercise::where('exercise_id',$exercise->id)
+            ->whereHas('routineDay.routine',fn ($query)=>$query->where('user_id',$recommendation->user_id)->where('is_active',true))
+            ->value('target_sets') ?? 0);
+        if ($sets < 1) return;
+
+        $this->targets->remember(User::findOrFail($recommendation->user_id),$exercise,$sets,$weight,$recommendation->weight_unit,$clamped);
     }
 
     private function lockPending(ProgressionRecommendation $recommendation): ProgressionRecommendation

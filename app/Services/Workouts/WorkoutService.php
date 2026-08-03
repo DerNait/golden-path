@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\WorkoutExercise;
 use App\Models\WorkoutSession;
 use App\Services\Gamification\GamificationService;
+use App\Services\Progression\ExerciseTargetService;
 use App\Services\Progression\ProgressionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -19,6 +20,7 @@ class WorkoutService
     public function __construct(
         private readonly ProgressionService $progression,
         private readonly GamificationService $gamification,
+        private readonly ExerciseTargetService $targets,
     ) {}
 
     public function start(User $user, RoutineDay $day, array $checkIn): WorkoutSession
@@ -43,6 +45,7 @@ class WorkoutService
                     'routine_exercise_id'=>$planned->id,'position'=>$planned->position,
                     'planned_snapshot_json'=>$planned->load('exercise.muscleGroups')->toArray(),
                     'previous_performance_json'=>$previous,'recommendation_snapshot_json'=>$recommendation,
+                    'target_snapshot_json'=>$this->targets->resolve($user,$planned->exercise,$planned),
                 ]);
             }
             return $session->load($this->relations());
@@ -62,6 +65,7 @@ class WorkoutService
             'performed_exercise_id'=>$alternative->id,'was_substituted'=>true,'substitution_reason'=>$reason,
             'previous_performance_json'=>$this->previousPerformance($user,$alternative),
             'recommendation_snapshot_json'=>$this->progression->recommend($user,$alternative,$routineExercise),
+            'target_snapshot_json'=>$this->targets->resolve($user,$alternative,$routineExercise),
         ]);
         return $workoutExercise->fresh($this->relationsForExercise());
     }
@@ -101,12 +105,12 @@ class WorkoutService
 
     public function relations(): array
     {
-        return ['user.profile','user.gameProfile','routineDay','exercises.plannedExercise.muscleGroups','exercises.plannedExercise.alternativeExercises','exercises.performedExercise.muscleGroups','exercises.sets'];
+        return ['user.profile','user.gameProfile','routineDay','exercises.plannedExercise.muscleGroups','exercises.plannedExercise.alternativeExercises','exercises.performedExercise.muscleGroups','exercises.sets','exercises.assistantRecommendation'];
     }
 
     private function relationsForExercise(): array
     {
-        return ['plannedExercise.muscleGroups','plannedExercise.alternativeExercises','performedExercise.muscleGroups','sets'];
+        return ['plannedExercise.muscleGroups','plannedExercise.alternativeExercises','performedExercise.muscleGroups','sets','assistantRecommendation'];
     }
 
     private function previousPerformance(User $user, Exercise $exercise): ?array

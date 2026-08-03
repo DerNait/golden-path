@@ -12,17 +12,23 @@ use Illuminate\Support\Collection;
 
 class ProgressionService
 {
-    public function __construct(private readonly StagnationDetectionService $stagnation) {}
+    public function __construct(
+        private readonly StagnationDetectionService $stagnation,
+        private readonly ExerciseTargetService $targets,
+    ) {}
 
     public function recommend(User $user, Exercise $exercise, ?RoutineExercise $routineExercise): array
     {
+        // Targets follow the exercise being performed, not the slot: an
+        // alternative must never inherit the planned exercise's load.
+        $target = $this->targets->resolve($user,$exercise,$routineExercise);
         $exposures = $this->exposures($user,$exercise);
         if ($exposures->count() < 2 || ! $routineExercise) {
             return $this->result(
                 RecommendationType::Calibrate,
                 RecommendationConfidence::Low,
                 'Calibrando: registra al menos dos exposiciones validas antes de ajustar la carga.',
-                $routineExercise?->target_weight,
+                $target['weight'],
             );
         }
 
@@ -136,7 +142,7 @@ class ProgressionService
         }
 
         $nextStep = $allRirRecorded && $averageRir >= 2 ? 2 : 1;
-        $existingTarget = (int) ($routineExercise->progression_target_total_reps ?? 0);
+        $existingTarget = (int) ($target['total_reps'] ?? 0);
         $suggestedTotal = min($maximumTotal,max($existingTarget,$currentTotal + $nextStep));
         $confidence = $allRirRecorded ? RecommendationConfidence::Medium : RecommendationConfidence::Low;
         $reason = $allRirRecorded
