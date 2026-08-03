@@ -10,7 +10,7 @@ class ExerciseTarget extends Model
 
     protected function casts(): array
     {
-        return ['target_weight' => 'decimal:2'];
+        return ['target_weight' => 'decimal:2', 'rep_distribution' => 'array'];
     }
 
     public function exercise(): \Illuminate\Database\Eloquent\Relations\BelongsTo

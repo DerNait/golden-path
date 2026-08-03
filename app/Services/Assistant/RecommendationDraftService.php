@@ -52,7 +52,10 @@ class RecommendationDraftService
                     'current_weight' => $routineExercise?->target_weight,
                     'suggested_weight' => $draft['suggested_weight'] ?? null,
                     'weight_unit' => $routineExercise?->weight_unit,
-                    'suggested_total_repetitions' => $draft['suggested_total_repetitions'] ?? null,
+                    // A split with no explicit total still states the goal.
+                    'suggested_total_repetitions' => $draft['suggested_total_repetitions']
+                        ?? (isset($draft['suggested_rep_distribution']) ? array_sum($draft['suggested_rep_distribution']) : null),
+                    'suggested_rep_distribution' => $draft['suggested_rep_distribution'] ?? null,
                     'reason' => $draft['reason'],
                     'confidence' => $draft['confidence'],
                     'status' => RecommendationStatus::Pending->value,

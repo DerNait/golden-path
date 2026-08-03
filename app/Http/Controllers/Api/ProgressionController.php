@@ -35,7 +35,7 @@ class ProgressionController extends Controller
         $this->authorize('update',$recommendation);
         $updated=DB::transaction(function () use ($recommendation): ProgressionRecommendation {
             $recommendation=$this->lockPending($recommendation);
-            $this->applyTarget($recommendation,$recommendation->suggested_weight,$recommendation->suggested_total_repetitions);
+            $this->applyTarget($recommendation,$recommendation->suggested_weight,$recommendation->suggested_total_repetitions,$recommendation->suggested_rep_distribution);
             $recommendation->update(['status'=>RecommendationStatus::Accepted->value,'accepted_at'=>now()]);
             return $recommendation->fresh('exercise');
         });
@@ -62,7 +62,7 @@ class ProgressionController extends Controller
         }
         $updated=DB::transaction(function () use ($recommendation,$data): ProgressionRecommendation {
             $recommendation=$this->lockPending($recommendation);
-            $this->applyTarget($recommendation,$data['suggested_weight']??null,$data['suggested_total_repetitions']??null);
+            $this->applyTarget($recommendation,$data['suggested_weight']??null,$data['suggested_total_repetitions']??null,$data['suggested_rep_distribution']??null);
             $recommendation->update(array_merge($data,['status'=>RecommendationStatus::Modified->value,'accepted_at'=>now()]));
             return $recommendation->fresh('exercise');
         });
@@ -75,11 +75,13 @@ class ProgressionController extends Controller
      * for an alternative performed in that slot the target is kept per
      * (exercise, number of sets) so it never overwrites the planned exercise.
      */
-    private function applyTarget(ProgressionRecommendation $recommendation, ?float $weight, ?int $totalReps): void
+    private function applyTarget(ProgressionRecommendation $recommendation, ?float $weight, ?int $totalReps, ?array $distribution = null): void
     {
         $slot=$recommendation->routineExercise;
         $plansThisExercise=$slot && (int) $slot->exercise_id===(int) $recommendation->exercise_id;
         $clamped=$totalReps!==null && $slot ? $this->clampTotalRepetitions($recommendation,$totalReps) : $totalReps;
+        // A split that no longer adds up to the goal would mislead; drop it.
+        if ($distribution && $clamped!==null && array_sum($distribution)!==$clamped) $distribution=null;
 
         if ($plansThisExercise) {
             $changes=[];
@@ -92,12 +94,12 @@ class ProgressionController extends Controller
         }
 
         $exercise=$recommendation->exercise;
-        if (! $exercise || ($weight===null && $clamped===null)) return;
+        if (! $exercise || ($weight===null && $clamped===null && ! $distribution)) return;
 
         $sets=$this->contextSets($recommendation);
         if ($sets < 1) return;
 
-        $this->targets->remember(User::findOrFail($recommendation->user_id),$exercise,$sets,$weight,$recommendation->weight_unit,$clamped);
+        $this->targets->remember(User::findOrFail($recommendation->user_id),$exercise,$sets,$weight,$recommendation->weight_unit,$clamped,$distribution);
     }
 
     /**

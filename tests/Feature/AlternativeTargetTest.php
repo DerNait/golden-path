@@ -173,6 +173,59 @@ class AlternativeTargetTest extends TestCase
         $this->assertSame('Manten 25 lb y busca 29 totales.', $first['assistant_recommendation']['reason']);
     }
 
+    public function test_rep_distribution_is_derived_and_front_loads_the_remainder(): void
+    {
+        $this->assertSame([10, 10, 10], ExerciseTargetService::distribute(30, 3));
+        $this->assertSame([10, 10, 9], ExerciseTargetService::distribute(29, 3));
+        $this->assertSame([11, 10], ExerciseTargetService::distribute(21, 2));
+        $this->assertSame([], ExerciseTargetService::distribute(0, 3));
+
+        $slot = $this->slotFor('Upper A', 1);
+        $slot->update(['target_sets' => 3, 'progression_target_total_reps' => 29]);
+
+        $resolved = app(ExerciseTargetService::class)->resolve($this->user, $slot->exercise, $slot->fresh());
+        $this->assertSame([10, 10, 9], $resolved['rep_distribution']);
+    }
+
+    public function test_accepted_distribution_is_kept_for_that_set_count(): void
+    {
+        $slot = $this->slotFor('Upper A', 1);
+        $slot->update(['target_sets' => 3, 'target_weight' => 25]);
+
+        $recommendation = ProgressionRecommendation::create([
+            'user_id' => $this->user->id, 'exercise_id' => $slot->exercise_id, 'routine_exercise_id' => $slot->id,
+            'recommendation_type' => 'increase_repetitions', 'suggested_total_repetitions' => 29,
+            'suggested_rep_distribution' => [12, 9, 8], 'weight_unit' => 'lb',
+            'reason' => 'Carga la primera serie.', 'confidence' => 'high', 'status' => 'pending',
+        ]);
+
+        $this->postJson("/api/progression/recommendations/{$recommendation->id}/accept")->assertOk();
+
+        // The proposed split wins over the even one for those sets.
+        $resolved = app(ExerciseTargetService::class)->resolve($this->user, $slot->exercise, $slot->fresh());
+        $this->assertSame([12, 9, 8], $resolved['rep_distribution']);
+    }
+
+    public function test_assistant_can_send_a_rep_distribution_and_totals_must_match(): void
+    {
+        $slot = $this->slotFor('Upper A', 1);
+        $token = $this->user->createToken('test', ['recommendations:write'])->plainTextToken;
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/assistant/recommendation-drafts', ['drafts' => [[
+                'exercise_id' => $slot->exercise_id, 'recommendation_type' => 'increase_repetitions',
+                'confidence' => 'high', 'reason' => 'Reparte asi.', 'suggested_rep_distribution' => [10, 10, 9],
+                'provider' => 'anthropic', 'model' => 'test',
+            ]]])->assertCreated()->assertJsonPath('created.0.suggested_total_repetitions', 29);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/assistant/recommendation-drafts', ['drafts' => [[
+                'exercise_id' => $slot->exercise_id, 'recommendation_type' => 'increase_repetitions',
+                'confidence' => 'high', 'reason' => 'No cuadra.', 'suggested_total_repetitions' => 30,
+                'suggested_rep_distribution' => [10, 10, 9], 'provider' => 'anthropic', 'model' => 'test',
+            ]]])->assertStatus(422);
+    }
+
     public function test_workout_exposes_resolved_target_and_assistant_recommendation(): void
     {
         $planned = $this->slotFor('Upper A', 1);

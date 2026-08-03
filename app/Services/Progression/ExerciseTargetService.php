@@ -19,7 +19,23 @@ use App\Models\WorkoutSet;
  */
 class ExerciseTargetService
 {
-    /** @return array{sets:int,min_reps:?int,max_reps:?int,weight:?float,weight_unit:?string,total_reps:?int,source:string} */
+    /**
+     * Ideal repetitions per set for a total: the remainder is front-loaded, so
+     * 29 reps in 3 sets reads 10/10/9 -- the first sets are the fresh ones.
+     *
+     * @return array<int,int>
+     */
+    public static function distribute(int $total, int $sets): array
+    {
+        if ($total < 1 || $sets < 1) return [];
+
+        $base = intdiv($total, $sets);
+        $remainder = $total % $sets;
+
+        return array_map(fn (int $index): int => $base + ($index < $remainder ? 1 : 0), range(0, $sets - 1));
+    }
+
+    /** @return array{sets:int,min_reps:?int,max_reps:?int,weight:?float,weight_unit:?string,total_reps:?int,rep_distribution:array<int,int>,source:string} */
     public function resolve(User $user, Exercise $exercise, ?RoutineExercise $slot): array
     {
         $sets = max(1, (int) ($slot->target_sets ?? 1));
@@ -38,10 +54,13 @@ class ExerciseTargetService
         $stored = ExerciseTarget::where('user_id', $user->id)
             ->where('exercise_id', $exercise->id)->where('target_sets', $sets)->first();
 
+        $distribution = [];
+
         if ($stored) {
             $weight = $stored->target_weight !== null ? (float) $stored->target_weight : null;
             $unit = $weight !== null ? $stored->weight_unit : null;
             $total = $stored->target_total_reps !== null ? (int) $stored->target_total_reps : null;
+            $distribution = array_map('intval', (array) ($stored->rep_distribution ?? []));
             $source = $weight !== null ? 'exercise_target' : $source;
         }
 
@@ -84,15 +103,21 @@ class ExerciseTargetService
             }
         }
 
+        // A stored split only applies to the sets it was written for.
+        if (count($distribution) !== $sets) {
+            $distribution = self::distribute((int) $total, $sets);
+        }
+
         return $context + [
             'weight' => $weight,
             'weight_unit' => $unit ?? $exercise->default_weight_unit,
             'total_reps' => $total,
+            'rep_distribution' => $distribution,
             'source' => $source,
         ];
     }
 
-    public function remember(User $user, Exercise $exercise, int $sets, ?float $weight, ?string $unit, ?int $totalReps): ExerciseTarget
+    public function remember(User $user, Exercise $exercise, int $sets, ?float $weight, ?string $unit, ?int $totalReps, ?array $distribution = null): ExerciseTarget
     {
         $target = ExerciseTarget::firstOrNew([
             'user_id' => $user->id, 'exercise_id' => $exercise->id, 'target_sets' => max(1, $sets),
@@ -105,6 +130,10 @@ class ExerciseTargetService
 
         if ($totalReps !== null) {
             $target->target_total_reps = $totalReps;
+        }
+
+        if ($distribution) {
+            $target->rep_distribution = array_values(array_map('intval', $distribution));
         }
 
         $target->save();

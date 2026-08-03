@@ -82,6 +82,14 @@ paths:
                       reason: { type: string, maxLength: 2000 }
                       suggested_weight: { type: number, nullable: true, minimum: 0, maximum: 2000 }
                       suggested_total_repetitions: { type: integer, nullable: true, minimum: 0, maximum: 5000 }
+                      suggested_rep_distribution:
+                        type: array
+                        nullable: true
+                        maxItems: 10
+                        items: { type: integer, minimum: 0, maximum: 100 }
+                        description: >
+                          Ideal repetitions per set, for example [10,10,9]. Must add up to
+                          suggested_total_repetitions when both are sent; alone it defines the total.
                       data_period: { type: string, nullable: true }
                       provider: { type: string }
                       model: { type: string }

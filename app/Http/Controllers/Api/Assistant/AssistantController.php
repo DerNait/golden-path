@@ -211,7 +211,8 @@ class AssistantController extends Controller
         return [
             'id' => $r->id, 'type' => $r->recommendation_type, 'confidence' => $r->confidence, 'reason' => $r->reason,
             'current_weight' => $this->decimal($r->current_weight), 'suggested_weight' => $this->decimal($r->suggested_weight),
-            'suggested_total_repetitions' => $r->suggested_total_repetitions, 'weight_unit' => $r->weight_unit,
+            'suggested_total_repetitions' => $r->suggested_total_repetitions,
+            'suggested_rep_distribution' => $r->suggested_rep_distribution, 'weight_unit' => $r->weight_unit,
             'source' => data_get($r->metadata_json, 'source', 'engine'),
             'created_at' => optional($r->created_at)->toIso8601String(),
         ];

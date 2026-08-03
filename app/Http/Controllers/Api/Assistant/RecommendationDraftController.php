@@ -35,6 +35,7 @@ class RecommendationDraftController extends Controller
                 'type' => $r->recommendation_type, 'confidence' => $r->confidence,
                 'suggested_weight' => $r->suggested_weight !== null ? (float) $r->suggested_weight : null,
                 'suggested_total_repetitions' => $r->suggested_total_repetitions,
+                'suggested_rep_distribution' => $r->suggested_rep_distribution,
                 'weight_unit' => $r->weight_unit, 'source' => 'assistant',
             ])->values(),
         ], 201);
