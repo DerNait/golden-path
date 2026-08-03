@@ -29,60 +29,66 @@ class ExerciseTargetService
             'max_reps' => $slot?->maximum_reps !== null ? (int) $slot->maximum_reps : null,
         ];
 
+        $weight = null;
+        $unit = null;
+        $total = null;
+        // Where the weight came from; the rep goal may come from another step.
+        $source = 'none';
+
         $stored = ExerciseTarget::where('user_id', $user->id)
             ->where('exercise_id', $exercise->id)->where('target_sets', $sets)->first();
 
-        if ($stored && ($stored->target_weight !== null || $stored->target_total_reps !== null)) {
-            return $context + [
-                'weight' => $stored->target_weight !== null ? (float) $stored->target_weight : null,
-                'weight_unit' => $stored->weight_unit ?? $exercise->default_weight_unit,
-                'total_reps' => $stored->target_total_reps !== null ? (int) $stored->target_total_reps : null,
-                'source' => 'exercise_target',
-            ];
+        if ($stored) {
+            $weight = $stored->target_weight !== null ? (float) $stored->target_weight : null;
+            $unit = $weight !== null ? $stored->weight_unit : null;
+            $total = $stored->target_total_reps !== null ? (int) $stored->target_total_reps : null;
+            $source = $weight !== null ? 'exercise_target' : $source;
         }
 
         // The slot plans this very exercise: its stored target already applies.
-        if ($slot && (int) $slot->exercise_id === (int) $exercise->id) {
-            return $context + [
-                'weight' => $slot->target_weight !== null ? (float) $slot->target_weight : null,
-                'weight_unit' => $slot->weight_unit ?? $exercise->default_weight_unit,
-                'total_reps' => $slot->progression_target_total_reps !== null ? (int) $slot->progression_target_total_reps : null,
-                'source' => 'routine_slot',
-            ];
-        }
-
-        // Performed as an alternative: borrow the exercise's own slot elsewhere
-        // in the routine and scale its rep goal to today's number of sets.
-        $home = RoutineExercise::where('exercise_id', $exercise->id)
+        // Otherwise borrow the exercise's own slot elsewhere in the routine and
+        // scale its rep goal to today's number of sets.
+        $plansThisExercise = $slot && (int) $slot->exercise_id === (int) $exercise->id;
+        $reference = $plansThisExercise ? $slot : RoutineExercise::where('exercise_id', $exercise->id)
             ->whereHas('routineDay.routine', fn ($q) => $q->where('user_id', $user->id)->where('is_active', true))
             ->orderBy('routine_day_id')->orderBy('position')->first();
 
-        if ($home) {
-            $homeSets = max(1, (int) $home->target_sets);
-            $total = $home->progression_target_total_reps !== null
-                ? (int) round(((int) $home->progression_target_total_reps / $homeSets) * $sets)
+        if ($reference) {
+            $referenceSets = max(1, (int) $reference->target_sets);
+            $referenceTotal = $reference->progression_target_total_reps !== null
+                ? (int) round(((int) $reference->progression_target_total_reps / $referenceSets) * $sets)
                 : null;
 
-            return $context + [
-                'weight' => $home->target_weight !== null ? (float) $home->target_weight : null,
-                'weight_unit' => $home->weight_unit ?? $exercise->default_weight_unit,
-                'total_reps' => $total,
-                'source' => 'home_slot',
-            ];
+            if ($weight === null && $reference->target_weight !== null) {
+                $weight = (float) $reference->target_weight;
+                $unit = $reference->weight_unit;
+                $source = $plansThisExercise ? 'routine_slot' : 'home_slot';
+            }
+            if ($total === null) {
+                $total = $referenceTotal;
+            }
         }
 
-        // Nothing planned anywhere: fall back to the last load actually used.
-        $lastSet = WorkoutSet::query()
-            ->where('completed', true)->where('set_type', 'working')->whereNotNull('weight')
-            ->whereHas('workoutExercise', fn ($q) => $q->where('performed_exercise_id', $exercise->id)
-                ->whereHas('session', fn ($s) => $s->where('user_id', $user->id)->whereIn('status', ['completed', 'partial'])))
-            ->latest('id')->first();
+        // Never planned a load: keep training with the one last used.
+        if ($weight === null) {
+            $lastSet = WorkoutSet::query()
+                ->where('completed', true)->where('set_type', 'working')->whereNotNull('weight')
+                ->whereHas('workoutExercise', fn ($q) => $q->where('performed_exercise_id', $exercise->id)
+                    ->whereHas('session', fn ($s) => $s->where('user_id', $user->id)->whereIn('status', ['completed', 'partial'])))
+                ->latest('id')->first();
+
+            if ($lastSet) {
+                $weight = (float) $lastSet->weight;
+                $unit = $lastSet->weight_unit;
+                $source = 'last_performance';
+            }
+        }
 
         return $context + [
-            'weight' => $lastSet?->weight !== null ? (float) $lastSet->weight : null,
-            'weight_unit' => $lastSet?->weight_unit ?? $exercise->default_weight_unit,
-            'total_reps' => null,
-            'source' => $lastSet ? 'last_performance' : 'none',
+            'weight' => $weight,
+            'weight_unit' => $unit ?? $exercise->default_weight_unit,
+            'total_reps' => $total,
+            'source' => $source,
         ];
     }
 

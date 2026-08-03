@@ -134,6 +134,45 @@ class AlternativeTargetTest extends TestCase
         ]);
     }
 
+    public function test_target_falls_back_to_the_last_load_when_the_slot_has_none(): void
+    {
+        $slot = $this->slotFor('Lower A', 2); // planned exercise, no target weight yet
+        $slot->update(['target_weight' => null, 'progression_target_total_reps' => 30, 'target_sets' => 3]);
+
+        $day = RoutineDay::where('name', 'Lower A')->firstOrFail();
+        $session = $this->postJson('/api/workouts/start', ['routine_day_id' => $day->id])->assertCreated()->json('data');
+        $workoutExerciseId = collect($session['exercises'])->firstWhere('planned_exercise.id', $slot->exercise_id)['id'];
+        $this->postJson("/api/workout-exercises/{$workoutExerciseId}/sets", [
+            'set_number' => 1, 'set_type' => 'working', 'weight' => 80, 'weight_unit' => 'lb',
+            'repetitions' => 10, 'rir' => 1, 'completed' => true,
+        ])->assertCreated();
+        $this->postJson("/api/workouts/{$session['id']}/finish", [])->assertOk();
+
+        $resolved = app(ExerciseTargetService::class)->resolve($this->user, $slot->exercise, $slot->fresh());
+
+        $this->assertSame(80.0, $resolved['weight']);          // last load actually used
+        $this->assertSame(30, $resolved['total_reps']);        // goal still comes from the slot
+        $this->assertSame('last_performance', $resolved['source']);
+    }
+
+    public function test_accepted_assistant_recommendation_still_shows_during_training(): void
+    {
+        $slot = $this->slotFor('Upper A', 1);
+        $recommendation = ProgressionRecommendation::create([
+            'user_id' => $this->user->id, 'exercise_id' => $slot->exercise_id, 'routine_exercise_id' => $slot->id,
+            'recommendation_type' => 'increase_repetitions', 'suggested_total_repetitions' => 29, 'weight_unit' => 'lb',
+            'reason' => 'Manten 25 lb y busca 29 totales.', 'confidence' => 'high', 'status' => 'pending',
+            'metadata_json' => ['source' => 'assistant', 'provider' => 'anthropic', 'model' => 'test'],
+        ]);
+        $this->postJson("/api/progression/recommendations/{$recommendation->id}/accept")->assertOk();
+
+        $day = RoutineDay::where('name', 'Upper A')->firstOrFail();
+        $session = $this->postJson('/api/workouts/start', ['routine_day_id' => $day->id])->assertCreated()->json('data');
+        $first = collect($session['exercises'])->firstWhere('planned_exercise.id', $slot->exercise_id);
+
+        $this->assertSame('Manten 25 lb y busca 29 totales.', $first['assistant_recommendation']['reason']);
+    }
+
     public function test_workout_exposes_resolved_target_and_assistant_recommendation(): void
     {
         $planned = $this->slotFor('Upper A', 1);
