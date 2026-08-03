@@ -104,6 +104,36 @@ class AlternativeTargetTest extends TestCase
         ]);
     }
 
+    public function test_alternative_without_its_own_slot_uses_the_sets_the_routine_asks_for(): void
+    {
+        $planned = $this->slotFor('Upper A', 1);
+        $planned->update(['target_sets' => 3]);
+        $alternative = $planned->exercise->alternativeExercises()->firstOrFail();
+        RoutineExercise::where('exercise_id', $alternative->id)->delete(); // trained only as an alternative
+
+        // Perform it as an alternative, logging fewer sets than planned.
+        $day = RoutineDay::where('name', 'Upper A')->firstOrFail();
+        $session = $this->postJson('/api/workouts/start', ['routine_day_id' => $day->id])->assertCreated()->json('data');
+        $workoutExerciseId = collect($session['exercises'])->firstWhere('planned_exercise.id', $planned->exercise_id)['id'];
+        $this->postJson("/api/workout-exercises/{$workoutExerciseId}/substitute", [
+            'alternative_exercise_id' => $alternative->id, 'reason' => 'equipment_busy',
+        ])->assertOk();
+
+        // A draft with no slot of its own must still land on the routine's sets.
+        $recommendation = ProgressionRecommendation::create([
+            'user_id' => $this->user->id, 'exercise_id' => $alternative->id, 'routine_exercise_id' => null,
+            'recommendation_type' => 'increase_weight', 'suggested_weight' => 70, 'weight_unit' => 'lb',
+            'reason' => 'Alternativa lista para subir.', 'confidence' => 'medium', 'status' => 'pending',
+        ]);
+
+        $this->postJson("/api/progression/recommendations/{$recommendation->id}/accept")->assertOk();
+
+        $this->assertDatabaseHas('exercise_targets', [
+            'user_id' => $this->user->id, 'exercise_id' => $alternative->id,
+            'target_sets' => 3, 'target_weight' => 70,
+        ]);
+    }
+
     public function test_workout_exposes_resolved_target_and_assistant_recommendation(): void
     {
         $planned = $this->slotFor('Upper A', 1);

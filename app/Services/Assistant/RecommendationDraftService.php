@@ -26,13 +26,17 @@ class RecommendationDraftService
             return collect($drafts)->map(function (array $draft) use ($user): ProgressionRecommendation {
                 $exerciseId = (int) $draft['exercise_id'];
 
+                $lastPerformed = WorkoutExercise::where('performed_exercise_id', $exerciseId)
+                    ->whereHas('session', fn ($q) => $q->where('user_id', $user->id)->whereIn('status', ['completed', 'partial']))
+                    ->latest('id')->first();
+                $lastSessionId = $lastPerformed?->workout_session_id;
+
+                // Exercises trained only as an alternative have no slot of their
+                // own, so fall back to the slot they were last performed in.
                 $routineExercise = RoutineExercise::where('exercise_id', $exerciseId)
                     ->whereHas('routineDay.routine', fn ($q) => $q->where('user_id', $user->id)->where('is_active', true))
-                    ->orderBy('routine_day_id')->orderBy('position')->first();
-
-                $lastSessionId = WorkoutExercise::where('performed_exercise_id', $exerciseId)
-                    ->whereHas('session', fn ($q) => $q->where('user_id', $user->id)->whereIn('status', ['completed', 'partial']))
-                    ->latest('id')->value('workout_session_id');
+                    ->orderBy('routine_day_id')->orderBy('position')->first()
+                    ?? $lastPerformed?->routineExercise;
 
                 ProgressionRecommendation::where('user_id', $user->id)
                     ->where('exercise_id', $exerciseId)

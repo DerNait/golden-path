@@ -9,6 +9,7 @@ use App\Http\Resources\RecommendationResource;
 use App\Models\ProgressionRecommendation;
 use App\Models\RoutineExercise;
 use App\Models\User;
+use App\Models\WorkoutExercise;
 use App\Services\Progression\ExerciseTargetService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -93,12 +94,33 @@ class ProgressionController extends Controller
         $exercise=$recommendation->exercise;
         if (! $exercise || ($weight===null && $clamped===null)) return;
 
-        $sets=(int) ($slot?->target_sets ?? RoutineExercise::where('exercise_id',$exercise->id)
-            ->whereHas('routineDay.routine',fn ($query)=>$query->where('user_id',$recommendation->user_id)->where('is_active',true))
-            ->value('target_sets') ?? 0);
+        $sets=$this->contextSets($recommendation);
         if ($sets < 1) return;
 
         $this->targets->remember(User::findOrFail($recommendation->user_id),$exercise,$sets,$weight,$recommendation->weight_unit,$clamped);
+    }
+
+    /**
+     * How many sets this recommendation belongs to. An exercise trained only as
+     * an alternative has no slot of its own, so it falls back to the slot it
+     * was last performed in: the sets the routine asks for there, not however
+     * many happened to be logged.
+     */
+    private function contextSets(ProgressionRecommendation $recommendation): int
+    {
+        if ($recommendation->routineExercise) return (int) $recommendation->routineExercise->target_sets;
+
+        $own=RoutineExercise::where('exercise_id',$recommendation->exercise_id)
+            ->whereHas('routineDay.routine',fn ($query)=>$query->where('user_id',$recommendation->user_id)->where('is_active',true))
+            ->orderBy('routine_day_id')->orderBy('position')->value('target_sets');
+        if ($own) return (int) $own;
+
+        $lastPerformed=WorkoutExercise::where('performed_exercise_id',$recommendation->exercise_id)
+            ->whereNotNull('routine_exercise_id')
+            ->whereHas('session',fn ($query)=>$query->where('user_id',$recommendation->user_id))
+            ->with('routineExercise:id,target_sets')->latest('id')->first();
+
+        return (int) ($lastPerformed?->routineExercise?->target_sets ?? 0);
     }
 
     private function lockPending(ProgressionRecommendation $recommendation): ProgressionRecommendation
