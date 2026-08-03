@@ -1,0 +1,96 @@
+openapi: 3.0.3
+info:
+  title: Golden Path Assistant API
+  version: "1.0.0"
+  description: >
+    Read-only training and body-composition context plus a write endpoint to
+    submit recommendation drafts that the owner reviews inside Golden Path.
+    All endpoints are scoped to the authenticated token's user. Drafts never
+    modify the routine, history or goals automatically.
+servers:
+  - url: https://gym.dernait.com/api/v1/assistant
+security:
+  - bearerAuth: []
+paths:
+  /today:
+    get:
+      summary: Today's training day with targets, last performance and pending recommendations
+      security: [{ bearerAuth: [training:read] }]
+      responses:
+        "200": { description: OK }
+  /workouts/recent:
+    get:
+      summary: Recent completed/partial sessions with per-exercise working sets
+      security: [{ bearerAuth: [training:read] }]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+        - { name: since, in: query, schema: { type: string, format: date } }
+      responses:
+        "200": { description: OK }
+  /exercises/{exercise}/history:
+    get:
+      summary: Per-exposure progression series for one exercise
+      security: [{ bearerAuth: [training:read] }]
+      parameters:
+        - { name: exercise, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+        "403": { description: Not the owner's exercise }
+  /training-context:
+    get:
+      summary: Profile, active phase and latest body composition
+      security: [{ bearerAuth: [training:read] }]
+      responses:
+        "200": { description: OK }
+  /body-stats:
+    get:
+      summary: Latest body composition and trend
+      security: [{ bearerAuth: [training:read] }]
+      responses:
+        "200": { description: OK }
+  /recommendations:
+    get:
+      summary: Pending recommendations with reasoning (engine and assistant)
+      security: [{ bearerAuth: [training:read] }]
+      responses:
+        "200": { description: OK }
+  /recommendation-drafts:
+    post:
+      summary: Submit assistant recommendation drafts (owner reviews before applying)
+      security: [{ bearerAuth: [recommendations:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [drafts]
+              properties:
+                drafts:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: object
+                    required: [exercise_id, recommendation_type, confidence, reason, provider, model]
+                    properties:
+                      exercise_id: { type: integer }
+                      recommendation_type:
+                        type: string
+                        enum: [calibrate, increase_weight, increase_repetitions, maintain, reduce_weight, increase_rest, possible_deload, manual_review]
+                      confidence: { type: string, enum: [low, medium, high] }
+                      reason: { type: string, maxLength: 2000 }
+                      suggested_weight: { type: number, nullable: true, minimum: 0, maximum: 2000 }
+                      suggested_total_repetitions: { type: integer, nullable: true, minimum: 0, maximum: 5000 }
+                      data_period: { type: string, nullable: true }
+                      provider: { type: string }
+                      model: { type: string }
+      responses:
+        "201": { description: Drafts created (status pending, source=assistant) }
+        "422": { description: Validation error }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Personal access token with abilities training:read and/or recommendations:write.

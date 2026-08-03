@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Api\Assistant\AssistantController;
+use App\Http\Controllers\Api\Assistant\RecommendationDraftController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BodyMeasurementController;
 use App\Http\Controllers\Api\DashboardController;
@@ -16,6 +18,22 @@ use App\Http\Controllers\Api\WorkoutSetController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+
+// Versioned, token-authenticated API for AI assistants (see docs/assistant-api.md).
+Route::prefix('v1/assistant')->middleware(['auth:sanctum', 'throttle:assistant'])->group(function (): void {
+    Route::middleware('abilities:training:read')->group(function (): void {
+        Route::get('/today', [AssistantController::class, 'today']);
+        Route::get('/workouts/recent', [AssistantController::class, 'recentWorkouts']);
+        Route::get('/exercises/{exercise}/history', [AssistantController::class, 'exerciseHistory']);
+        Route::get('/training-context', [AssistantController::class, 'trainingContext']);
+        Route::get('/body-stats', [AssistantController::class, 'bodyStats']);
+        Route::get('/recommendations', [AssistantController::class, 'recommendations']);
+    });
+
+    Route::middleware('abilities:recommendations:write')->group(function (): void {
+        Route::post('/recommendation-drafts', [RecommendationDraftController::class, 'store']);
+    });
+});
 
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout']);

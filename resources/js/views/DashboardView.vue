@@ -56,7 +56,7 @@ onMounted(load);
 
       <section class="grid two-column section-block">
         <div><div class="section-heading"><div><h2>Recomendaciones pendientes</h2><p>Decisiones explicadas por tu rendimiento.</p></div><RouterLink class="icon-button compact" title="Ver progreso" :to="{name:'progress'}"><i class="fa-solid fa-arrow-right"/></RouterLink></div>
-          <div v-if="data.pending_recommendations.length" class="recommendation-list"><article v-for="item in data.pending_recommendations" :key="item.id" class="recommendation-row"><div class="d-flex justify-content-between gap-2"><strong>{{ item.exercise.name }}</strong><span class="badge-soft blue">{{ confidenceLabel(item.confidence) }}</span></div><p class="small text-secondary mb-0 mt-2">{{ item.reason }}</p></article></div>
+          <div v-if="data.pending_recommendations.length" class="recommendation-list"><article v-for="item in data.pending_recommendations" :key="item.id" class="recommendation-row"><div class="d-flex justify-content-between gap-2"><strong>{{ item.exercise.name }}</strong><span class="d-flex gap-1"><span v-if="item.metadata_json?.source==='assistant'" class="badge-soft green">IA</span><span class="badge-soft blue">{{ confidenceLabel(item.confidence) }}</span></span></div><p class="small text-secondary mb-0 mt-2">{{ item.reason }}</p></article></div>
           <EmptyState v-else title="Sin recomendaciones pendientes" text="Las recomendaciones apareceran despues de registrar exposiciones validas." icon="fa-lightbulb" />
         </div>
         <div><div class="section-heading"><div><h2>Ultimos records</h2><p>Tus mejores marcas por ejercicio.</p></div></div>
