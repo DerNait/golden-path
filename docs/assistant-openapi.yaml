@@ -50,10 +50,19 @@ paths:
         "200": { description: OK }
   /recommendations:
     get:
-      summary: Pending recommendations with reasoning (engine and assistant)
+      summary: Recommendations with reasoning (engine and assistant), filterable by status
       security: [{ bearerAuth: [training:read] }]
+      parameters:
+        - name: status
+          in: query
+          description: >
+            Defaults to pending. Accepts "all", a single state or several comma-separated:
+            pending, accepted, modified, ignored, superseded.
+          schema: { type: string, default: pending }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
       responses:
         "200": { description: OK }
+        "422": { description: Unknown status }
   /recommendation-drafts:
     post:
       summary: Submit assistant recommendation drafts (owner reviews before applying)

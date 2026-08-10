@@ -54,6 +54,32 @@ class AssistantApiTest extends TestCase
             ->assertOk()->assertJsonStructure(['data']);
     }
 
+    public function test_recommendations_can_be_filtered_by_status(): void
+    {
+        $token = $this->token(['training:read']);
+        $base = ['user_id' => $this->user->id, 'exercise_id' => 1, 'recommendation_type' => 'maintain',
+            'confidence' => 'low', 'weight_unit' => 'lb'];
+        ProgressionRecommendation::create($base + ['reason' => 'pendiente', 'status' => 'pending']);
+        ProgressionRecommendation::create($base + ['reason' => 'aceptada', 'status' => 'accepted']);
+        ProgressionRecommendation::create($base + ['reason' => 'ignorada', 'status' => 'ignored']);
+
+        // Pending by default.
+        $this->bearer($token)->getJson('/api/v1/assistant/recommendations')
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.status', 'pending');
+
+        $this->bearer($token)->getJson('/api/v1/assistant/recommendations?status=accepted')
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.reason', 'aceptada');
+
+        $this->bearer($token)->getJson('/api/v1/assistant/recommendations?status=pending,accepted')
+            ->assertOk()->assertJsonCount(2, 'data');
+
+        $this->bearer($token)->getJson('/api/v1/assistant/recommendations?status=all')
+            ->assertOk()->assertJsonCount(3, 'data');
+
+        $this->bearer($token)->getJson('/api/v1/assistant/recommendations?status=bogus')
+            ->assertStatus(422);
+    }
+
     public function test_training_read_token_cannot_write_drafts(): void
     {
         $token = $this->token(['training:read']);

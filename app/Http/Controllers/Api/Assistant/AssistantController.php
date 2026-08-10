@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Assistant;
 
+use App\Enums\RecommendationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Exercise;
 use App\Models\PersonalRecord;
@@ -162,11 +163,32 @@ class AssistantController extends Controller
 
     public function recommendations(Request $request): JsonResponse
     {
-        $pending = ProgressionRecommendation::where('user_id', $request->user()->id)
-            ->where('status', 'pending')->with('exercise:id,name')->latest()->get();
+        $data = $request->validate([
+            'status' => ['nullable', 'string', 'max:120', function (string $attribute, mixed $value, callable $fail): void {
+                $allowed = array_column(RecommendationStatus::cases(), 'value');
+                foreach (explode(',', (string) $value) as $part) {
+                    $part = trim($part);
+                    if ($part !== 'all' && ! in_array($part, $allowed, true)) {
+                        $fail("Estado no valido: {$part}.");
+                    }
+                }
+            }],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $status = $data['status'] ?? RecommendationStatus::Pending->value;
+        $query = ProgressionRecommendation::where('user_id', $request->user()->id)
+            ->with('exercise:id,name')->latest();
+
+        if ($status !== 'all') {
+            $query->whereIn('status', array_filter(array_map('trim', explode(',', $status))));
+        }
+
+        $recommendations = $query->limit($data['limit'] ?? 50)->get();
 
         return response()->json([
-            'data' => $pending->map(fn ($r) => array_merge($this->recommendationBrief($r), [
+            'status' => $status,
+            'data' => $recommendations->map(fn ($r) => array_merge($this->recommendationBrief($r), [
                 'exercise' => ['id' => $r->exercise_id, 'name' => $r->exercise?->name],
             ]))->values(),
         ]);
@@ -214,6 +236,8 @@ class AssistantController extends Controller
             'suggested_total_repetitions' => $r->suggested_total_repetitions,
             'suggested_rep_distribution' => $r->suggested_rep_distribution, 'weight_unit' => $r->weight_unit,
             'source' => data_get($r->metadata_json, 'source', 'engine'),
+            'status' => $r->status,
+            'accepted_at' => optional($r->accepted_at)->toIso8601String(),
             'created_at' => optional($r->created_at)->toIso8601String(),
         ];
     }

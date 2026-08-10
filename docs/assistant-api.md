@@ -9,6 +9,9 @@ reviews inside Golden Path.
 - **Auth:** `Authorization: Bearer <token>` (Sanctum personal access token)
 - **Abilities:** `training:read` for every GET, `recommendations:write` for the draft POST
 - **OpenAPI schema:** [`assistant-openapi.yaml`](./assistant-openapi.yaml)
+- **Shareable copy:** [`assistant-api-shared.md`](./assistant-api-shared.md) — same guide without any
+  credential handling, meant to be uploaded to an external assistant. Keep token
+  administration (this file, section 1) private.
 
 Everything is scoped to the token owner. The write endpoint only creates
 **pending drafts**: it never changes the routine, history or goals. The owner
@@ -78,6 +81,8 @@ curl -s -H "Authorization: Bearer $TOKEN" $BASE/exercises/1/history
 curl -s -H "Authorization: Bearer $TOKEN" $BASE/training-context
 curl -s -H "Authorization: Bearer $TOKEN" $BASE/body-stats
 curl -s -H "Authorization: Bearer $TOKEN" $BASE/recommendations
+curl -s -H "Authorization: Bearer $TOKEN" "$BASE/recommendations?status=accepted&limit=20"
+curl -s -H "Authorization: Bearer $TOKEN" "$BASE/recommendations?status=pending,accepted"
 ```
 
 | Endpoint | What it answers |
@@ -87,7 +92,7 @@ curl -s -H "Authorization: Bearer $TOKEN" $BASE/recommendations
 | `GET /exercises/{id}/history` | Per-exposure series for one exercise: max weight, best set, volume, estimated 1RM, average RIR, records |
 | `GET /training-context` | Profile, active training phase and latest body composition |
 | `GET /body-stats` | Latest body composition plus the trend across measurements |
-| `GET /recommendations` | Pending recommendations with their reasoning and `source` (`engine` or `assistant`) |
+| `GET /recommendations` | Recommendations with their reasoning and `source` (`engine` or `assistant`). `status` defaults to `pending` and accepts `all`, one state or several comma-separated (`pending`, `accepted`, `modified`, `ignored`, `superseded`); `limit` caps the list |
 
 Weights are reported with their own unit (`lb` for lifting). Body composition
 is in kilograms. Exercises trained as an alternative keep their own history.
