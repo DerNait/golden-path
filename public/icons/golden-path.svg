@@ -1,5 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Golden Path">
+  <defs>
+    <linearGradient id="gp-gold" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#d99b25"/>
+      <stop offset="0.55" stop-color="#f4c95d"/>
+      <stop offset="1" stop-color="#ffe6a3"/>
+    </linearGradient>
+    <radialGradient id="gp-glow" cx="0.74" cy="0.22" r="0.7">
+      <stop offset="0" stop-color="#f4c95d" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#f4c95d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
   <rect width="512" height="512" rx="112" fill="#0b0f14"/>
-  <path fill="#f4c95d" d="M104 210h40v92h-40zm264 0h40v92h-40zM64 230h28v52H64zm356 0h28v52h-28zm-264 12h200v28H156z"/>
-  <path fill="#ffffff" d="M223 146h66l22 54h-34l-10-25h-22l-10 25h-34zm0 220h66l22-54h-34l-10 25h-22l-10-25h-34z"/>
+  <rect width="512" height="512" rx="112" fill="url(#gp-glow)"/>
+
+  <!-- The climb: each step is one more session logged. -->
+  <path d="M120 392 H 216 V 312 H 312 V 232 H 400" fill="none" stroke="url(#gp-gold)"
+        stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- The goal waiting at the top. -->
+  <path fill="#ffe6a3" d="M400 96c5 30 17 42 47 47-30 5-42 17-47 47-5-30-17-42-47-47 30-5 42-17 47-47z"/>
 </svg>

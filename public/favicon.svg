@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Golden Path">
+  <defs>
+    <linearGradient id="gp-fav-gold" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#d99b25"/>
+      <stop offset="0.55" stop-color="#f4c95d"/>
+      <stop offset="1" stop-color="#ffe6a3"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="104" fill="#0b0f14"/>
+
+  <!-- Fewer, chunkier steps than the app icon: at 16px only the climb survives. -->
+  <path d="M100 380 H 204 V 256 H 308 V 132 H 412" fill="none" stroke="url(#gp-fav-gold)"
+        stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

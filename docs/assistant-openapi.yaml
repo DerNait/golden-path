@@ -1,12 +1,12 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Golden Path Assistant API
-  version: "1.0.0"
-  description: >
+  description: >-
     Read-only training and body-composition context plus a write endpoint to
     submit recommendation drafts that the owner reviews inside Golden Path.
     All endpoints are scoped to the authenticated token's user. Drafts never
     modify the routine, history or goals automatically.
+  version: 1.0.0
 servers:
   - url: https://gym.dernait.com/api/v1/assistant
 security:
@@ -14,100 +14,594 @@ security:
 paths:
   /today:
     get:
+      tags:
+        - training
       summary: Today's training day with targets, last performance and pending recommendations
-      security: [{ bearerAuth: [training:read] }]
+      description: Requires the training:read ability.
+      operationId: getToday
       responses:
-        "200": { description: OK }
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodayResponse"
   /workouts/recent:
     get:
-      summary: Recent completed/partial sessions with per-exercise working sets
-      security: [{ bearerAuth: [training:read] }]
+      tags:
+        - training
+      summary: Recent completed or partial sessions with the working sets of each exercise
+      description: Requires the training:read ability.
+      operationId: getRecentWorkouts
       parameters:
-        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
-        - { name: since, in: query, schema: { type: string, format: date } }
+        - name: limit
+          in: query
+          required: false
+          description: How many sessions to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+        - name: since
+          in: query
+          required: false
+          description: Only sessions on or after this date.
+          schema:
+            type: string
+            format: date
       responses:
-        "200": { description: OK }
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecentWorkoutsResponse"
   /exercises/{exercise}/history:
     get:
+      tags:
+        - training
       summary: Per-exposure progression series for one exercise
-      security: [{ bearerAuth: [training:read] }]
+      description: Requires the training:read ability.
+      operationId: getExerciseHistory
       parameters:
-        - { name: exercise, in: path, required: true, schema: { type: integer } }
+        - name: exercise
+          in: path
+          required: true
+          description: Exercise id.
+          schema:
+            type: integer
       responses:
-        "200": { description: OK }
-        "403": { description: Not the owner's exercise }
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExerciseHistoryResponse"
+        "403":
+          description: not the owner's exercise
   /training-context:
     get:
-      summary: Profile, active phase and latest body composition
-      security: [{ bearerAuth: [training:read] }]
+      tags:
+        - training
+      summary: Profile, active training phase and latest body composition
+      description: Requires the training:read ability.
+      operationId: getTrainingContext
       responses:
-        "200": { description: OK }
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainingContextResponse"
   /body-stats:
     get:
-      summary: Latest body composition and trend
-      security: [{ bearerAuth: [training:read] }]
+      tags:
+        - body
+      summary: Latest body composition and its trend
+      description: Requires the training:read ability.
+      operationId: getBodyStats
       responses:
-        "200": { description: OK }
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BodyStatsResponse"
   /recommendations:
     get:
-      summary: Recommendations with reasoning (engine and assistant), filterable by status
-      security: [{ bearerAuth: [training:read] }]
+      tags:
+        - recommendations
+      summary: Recommendations with reasoning, filterable by status
+      description: >-
+        Requires the training:read ability. Status defaults to pending and
+        accepts "all", a single state or several comma-separated values.
+      operationId: getRecommendations
       parameters:
         - name: status
           in: query
-          description: >
-            Defaults to pending. Accepts "all", a single state or several comma-separated:
-            pending, accepted, modified, ignored, superseded.
-          schema: { type: string, default: pending }
-        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+          required: false
+          description: pending, accepted, modified, ignored, superseded, all, or a comma-separated list.
+          schema:
+            type: string
+            default: pending
+        - name: limit
+          in: query
+          required: false
+          description: How many recommendations to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
       responses:
-        "200": { description: OK }
-        "422": { description: Unknown status }
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationsResponse"
+        "422":
+          description: unknown status
   /recommendation-drafts:
     post:
-      summary: Submit assistant recommendation drafts (owner reviews before applying)
-      security: [{ bearerAuth: [recommendations:write] }]
+      tags:
+        - recommendations
+      summary: Submit recommendation drafts for the owner to review
+      description: >-
+        Requires the recommendations:write ability. Each draft supersedes the
+        pending recommendation for its exercise and is stored as pending; the
+        owner accepts, modifies or ignores it inside Golden Path.
+      operationId: createRecommendationDrafts
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [drafts]
-              properties:
-                drafts:
-                  type: array
-                  minItems: 1
-                  maxItems: 50
-                  items:
-                    type: object
-                    required: [exercise_id, recommendation_type, confidence, reason, provider, model]
-                    properties:
-                      exercise_id: { type: integer }
-                      recommendation_type:
-                        type: string
-                        enum: [calibrate, increase_weight, increase_repetitions, maintain, reduce_weight, increase_rest, possible_deload, manual_review]
-                      confidence: { type: string, enum: [low, medium, high] }
-                      reason: { type: string, maxLength: 2000 }
-                      suggested_weight: { type: number, nullable: true, minimum: 0, maximum: 2000 }
-                      suggested_total_repetitions: { type: integer, nullable: true, minimum: 0, maximum: 5000 }
-                      suggested_rep_distribution:
-                        type: array
-                        nullable: true
-                        maxItems: 10
-                        items: { type: integer, minimum: 0, maximum: 100 }
-                        description: >
-                          Ideal repetitions per set, for example [10,10,9]. Must add up to
-                          suggested_total_repetitions when both are sent; alone it defines the total.
-                      data_period: { type: string, nullable: true }
-                      provider: { type: string }
-                      model: { type: string }
+              $ref: "#/components/schemas/RecommendationDraftRequest"
       responses:
-        "201": { description: Drafts created (status pending, source=assistant) }
-        "422": { description: Validation error }
+        "201":
+          description: drafts created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationDraftsCreated"
+        "422":
+          description: validation error
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
-      description: Personal access token with abilities training:read and/or recommendations:write.
+      description: Personal access token with the training:read and/or recommendations:write abilities.
+  schemas:
+    ExerciseBrief:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        metric_type:
+          type: string
+        muscle_groups:
+          type: array
+          items:
+            type: string
+    WorkingSet:
+      type: object
+      properties:
+        weight:
+          type: number
+        weight_unit:
+          type: string
+        repetitions:
+          type: integer
+        rir:
+          type: integer
+        volume:
+          type: number
+    LastPerformance:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        working_sets:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkingSet"
+    Recommendation:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        confidence:
+          type: string
+        reason:
+          type: string
+        current_weight:
+          type: number
+        suggested_weight:
+          type: number
+        suggested_total_repetitions:
+          type: integer
+        suggested_rep_distribution:
+          type: array
+          items:
+            type: integer
+        weight_unit:
+          type: string
+        source:
+          type: string
+          description: engine or assistant.
+        status:
+          type: string
+        accepted_at:
+          type: string
+        created_at:
+          type: string
+        exercise:
+          $ref: "#/components/schemas/ExerciseBrief"
+    PlannedTarget:
+      type: object
+      properties:
+        sets:
+          type: integer
+        min_reps:
+          type: integer
+        max_reps:
+          type: integer
+        progression_target_total_reps:
+          type: integer
+        target_weight:
+          type: number
+        weight_unit:
+          type: string
+        rir_min:
+          type: integer
+        rir_max:
+          type: integer
+        rest_seconds:
+          type: integer
+    TodayExercise:
+      type: object
+      properties:
+        exercise:
+          $ref: "#/components/schemas/ExerciseBrief"
+        priority:
+          type: string
+        target:
+          $ref: "#/components/schemas/PlannedTarget"
+        last_performance:
+          $ref: "#/components/schemas/LastPerformance"
+        pending_recommendation:
+          $ref: "#/components/schemas/Recommendation"
+    TodayResponse:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        is_training_day:
+          type: boolean
+        day:
+          type: object
+          properties:
+            name:
+              type: string
+            type:
+              type: string
+        exercises:
+          type: array
+          items:
+            $ref: "#/components/schemas/TodayExercise"
+    SessionExercise:
+      type: object
+      properties:
+        exercise:
+          $ref: "#/components/schemas/ExerciseBrief"
+        was_substituted:
+          type: boolean
+        working_sets:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkingSet"
+    Session:
+      type: object
+      properties:
+        id:
+          type: integer
+        day:
+          type: string
+        status:
+          type: string
+        started_at:
+          type: string
+        duration_seconds:
+          type: integer
+        total_volume:
+          type: number
+        exercises:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionExercise"
+    RecentWorkoutsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+    BestSet:
+      type: object
+      properties:
+        weight:
+          type: number
+        reps:
+          type: integer
+        volume:
+          type: number
+    ExposureSeries:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        max_weight:
+          type: number
+        best_set:
+          $ref: "#/components/schemas/BestSet"
+        total_repetitions:
+          type: integer
+        volume:
+          type: number
+        average_rir:
+          type: number
+        estimated_one_rep_max:
+          type: number
+    PersonalRecord:
+      type: object
+      properties:
+        record_type:
+          type: string
+        value:
+          type: number
+        weight_unit:
+          type: string
+        achieved_at:
+          type: string
+    ExerciseHistoryResponse:
+      type: object
+      properties:
+        exercise:
+          $ref: "#/components/schemas/ExerciseBrief"
+        calibration:
+          type: object
+          properties:
+            exposures:
+              type: integer
+            complete:
+              type: boolean
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExposureSeries"
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/PersonalRecord"
+    BodyComposition:
+      type: object
+      properties:
+        recorded_on:
+          type: string
+          format: date
+        body_weight_kg:
+          type: number
+        waist_cm:
+          type: number
+        body_fat_percentage:
+          type: number
+        fat_mass_kg:
+          type: number
+        lean_mass_kg:
+          type: number
+        skeletal_muscle_mass_kg:
+          type: number
+        total_body_water_kg:
+          type: number
+        visceral_fat_level:
+          type: integer
+        basal_metabolic_rate_kcal:
+          type: integer
+    BodyTrendPoint:
+      type: object
+      properties:
+        recorded_on:
+          type: string
+          format: date
+        body_weight_kg:
+          type: number
+        body_fat_percentage:
+          type: number
+        skeletal_muscle_mass_kg:
+          type: number
+        waist_cm:
+          type: number
+    BodyStatsResponse:
+      type: object
+      properties:
+        latest:
+          $ref: "#/components/schemas/BodyComposition"
+        trend:
+          type: array
+          items:
+            $ref: "#/components/schemas/BodyTrendPoint"
+    TrainingContextResponse:
+      type: object
+      properties:
+        profile:
+          type: object
+          properties:
+            age:
+              type: integer
+            height_cm:
+              type: number
+            biological_sex:
+              type: string
+            objective:
+              type: string
+            experience_level:
+              type: string
+            weekly_workout_goal:
+              type: integer
+            target_session_minutes:
+              type: integer
+            protein_goal_min_grams:
+              type: integer
+            protein_goal_max_grams:
+              type: integer
+            sleep_goal_hours:
+              type: number
+            current_body_weight_kg:
+              type: number
+            preferred_body_weight_unit:
+              type: string
+        active_phase:
+          type: object
+          properties:
+            name:
+              type: string
+            starts_on:
+              type: string
+              format: date
+            ends_on:
+              type: string
+              format: date
+            minimum_target_sessions:
+              type: integer
+            target_weight_min_kg:
+              type: number
+            target_weight_max_kg:
+              type: number
+        latest_body_composition:
+          $ref: "#/components/schemas/BodyComposition"
+    RecommendationsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Recommendation"
+    RecommendationDraft:
+      type: object
+      required:
+        - exercise_id
+        - recommendation_type
+        - confidence
+        - reason
+        - provider
+        - model
+      properties:
+        exercise_id:
+          type: integer
+          description: Must belong to the athlete.
+        recommendation_type:
+          type: string
+          enum:
+            - calibrate
+            - increase_weight
+            - increase_repetitions
+            - maintain
+            - reduce_weight
+            - increase_rest
+            - possible_deload
+            - manual_review
+        confidence:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+        reason:
+          type: string
+          maxLength: 2000
+          description: Plain language explanation the athlete reads while training.
+        suggested_weight:
+          type: number
+          minimum: 0
+          maximum: 2000
+          description: Target load in the exercise's own unit.
+        suggested_total_repetitions:
+          type: integer
+          minimum: 0
+          maximum: 5000
+          description: Goal across all working sets.
+        suggested_rep_distribution:
+          type: array
+          maxItems: 10
+          items:
+            type: integer
+            minimum: 0
+            maximum: 100
+          description: >-
+            Ideal repetitions per set, for example [10,10,9]. Must add up to
+            suggested_total_repetitions when both are sent; alone it defines the total.
+        data_period:
+          type: string
+          maxLength: 100
+          description: Window of data the advice is based on.
+        provider:
+          type: string
+          maxLength: 100
+        model:
+          type: string
+          maxLength: 100
+    RecommendationDraftRequest:
+      type: object
+      required:
+        - drafts
+      properties:
+        drafts:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/RecommendationDraft"
+    CreatedDraft:
+      type: object
+      properties:
+        id:
+          type: integer
+        exercise_id:
+          type: integer
+        status:
+          type: string
+        type:
+          type: string
+        confidence:
+          type: string
+        suggested_weight:
+          type: number
+        suggested_total_repetitions:
+          type: integer
+        suggested_rep_distribution:
+          type: array
+          items:
+            type: integer
+        weight_unit:
+          type: string
+        source:
+          type: string
+    RecommendationDraftsCreated:
+      type: object
+      properties:
+        created:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreatedDraft"

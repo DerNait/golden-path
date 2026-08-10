@@ -29,8 +29,8 @@ self.addEventListener('push', (event) => {
 
     await self.registration.showNotification(data.title || 'Descanso terminado', {
       body: data.body || 'Es momento de comenzar tu siguiente serie.',
-      icon: '/icons/golden-path.svg',
-      badge: '/icons/golden-path.svg',
+      icon: '/icons/golden-path-192.png',
+      badge: '/icons/golden-path-192.png',
       tag: data.tag || 'golden-path-rest-timer',
       renotify: true,
       vibrate: [180, 80, 180],
