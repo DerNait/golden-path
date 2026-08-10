@@ -78,6 +78,10 @@ class AssistantApiTest extends TestCase
 
         $this->bearer($token)->getJson('/api/v1/assistant/recommendations?status=bogus')
             ->assertStatus(422);
+
+        // Clients that forget the JSON header must still get the error, not a redirect.
+        $this->bearer($token)->get('/api/v1/assistant/recommendations?status=bogus')
+            ->assertStatus(422);
     }
 
     public function test_training_read_token_cannot_write_drafts(): void
