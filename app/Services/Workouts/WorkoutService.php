@@ -52,17 +52,20 @@ class WorkoutService
         });
     }
 
-    public function substitute(User $user, WorkoutExercise $workoutExercise, Exercise $alternative, string $reason): WorkoutExercise
+    public function substitute(User $user, WorkoutExercise $workoutExercise, Exercise $alternative, ?string $reason): WorkoutExercise
     {
         $workoutExercise->loadMissing('session','plannedExercise.alternatives');
         if ($workoutExercise->session->user_id !== $user->id || $workoutExercise->session->status !== 'in_progress') abort(403);
-        if (! $workoutExercise->plannedExercise->alternatives->contains('alternative_exercise_id',$alternative->id)) {
+        // Going back to the planned exercise is always allowed: the equipment
+        // that was busy may free up before the first set is logged.
+        $isRevert = (int) $alternative->id === (int) $workoutExercise->planned_exercise_id;
+        if (! $isRevert && ! $workoutExercise->plannedExercise->alternatives->contains('alternative_exercise_id',$alternative->id)) {
             throw ValidationException::withMessages(['alternative_exercise_id'=>'El ejercicio no esta configurado como alternativa.']);
         }
         if ($workoutExercise->sets()->exists()) throw ValidationException::withMessages(['exercise'=>'No se puede sustituir despues de registrar series.']);
         $routineExercise = $workoutExercise->routineExercise;
         $workoutExercise->update([
-            'performed_exercise_id'=>$alternative->id,'was_substituted'=>true,'substitution_reason'=>$reason,
+            'performed_exercise_id'=>$alternative->id,'was_substituted'=>! $isRevert,'substitution_reason'=>$isRevert ? null : $reason,
             'previous_performance_json'=>$this->previousPerformance($user,$alternative),
             'recommendation_snapshot_json'=>$this->progression->recommend($user,$alternative,$routineExercise),
             'target_snapshot_json'=>$this->targets->resolve($user,$alternative,$routineExercise),

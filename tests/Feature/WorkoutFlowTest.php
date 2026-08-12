@@ -51,6 +51,36 @@ class WorkoutFlowTest extends TestCase
         $this->assertNull($updated['previous_performance']);
     }
 
+    public function test_substitution_can_be_undone_before_logging_sets(): void
+    {
+        $day=RoutineDay::where('day_type','training')->firstOrFail();
+        $session=$this->postJson('/api/workouts/start',['routine_day_id'=>$day->id])->assertCreated()->json('data');
+        $item=$session['exercises'][0];
+        $planned=$item['planned_exercise'];
+        $alternative=$planned['alternatives'][0];
+
+        $this->postJson("/api/workout-exercises/{$item['id']}/substitute",[
+            'alternative_exercise_id'=>$alternative['id'],'reason'=>'equipment_busy',
+        ])->assertOk();
+
+        // The machine freed up: going back needs no reason.
+        $reverted=$this->postJson("/api/workout-exercises/{$item['id']}/substitute",[
+            'alternative_exercise_id'=>$planned['id'],
+        ])->assertOk()->json('data');
+
+        $this->assertSame($planned['id'],$reverted['performed_exercise']['id']);
+        $this->assertFalse($reverted['was_substituted']);
+        $this->assertNull($reverted['substitution_reason']);
+
+        // Once a set exists the exercise is settled, in either direction.
+        $this->postJson("/api/workout-exercises/{$item['id']}/sets",[
+            'set_number'=>1,'set_type'=>'working','weight'=>20,'weight_unit'=>'lb','repetitions'=>10,'rir'=>2,'completed'=>true,
+        ])->assertCreated();
+        $this->postJson("/api/workout-exercises/{$item['id']}/substitute",[
+            'alternative_exercise_id'=>$alternative['id'],'reason'=>'equipment_busy',
+        ])->assertUnprocessable();
+    }
+
     public function test_warmups_do_not_count_for_volume_or_records(): void
     {
         $day=RoutineDay::where('day_type','training')->firstOrFail(); $session=$this->postJson('/api/workouts/start',['routine_day_id'=>$day->id])->json('data'); $exercise=$session['exercises'][0];
