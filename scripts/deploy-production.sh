@@ -20,6 +20,7 @@ test -s "${ARTIFACT}.sha256"
 rsync -az --delete -e "${RSYNC_SSH}" \
     --exclude='.git/' \
     --exclude='.env' \
+    --exclude='.deploy-credentials' \
     --exclude='.build/' \
     --exclude='artifacts/' \
     --exclude='node_modules/' \
