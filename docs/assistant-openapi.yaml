@@ -34,12 +34,10 @@ paths:
         - training
       summary: The whole active routine with set counts, alternatives and stored goals per set count
       description: >-
-        Requires the training:read ability. The same exercise can be planned
-        at different set counts (for example 3 sets on Lower A and 2 on Lower
-        B) or trained as an alternative in another exercise's slot. Goals are
-        kept per (exercise, set count); every recommendation states its
-        target_sets, and multi_set_exercises lists the exercises that need one
-        recommendation per set count.
+        Requires training:read. An exercise can be planned at different set
+        counts or as an alternative in another slot; goals are kept per
+        (exercise, set count). multi_set_exercises lists exercises needing one
+        recommendation per count.
       operationId: getRoutine
       responses:
         "200":
@@ -172,12 +170,10 @@ paths:
         - recommendations
       summary: Publish recommendations; they apply immediately
       description: >-
-        Requires the recommendations:write ability. Each draft is stored as
-        accepted and applied at once: its load, repetition goal and split
-        become the target for its exercise at target_sets. target_sets is
-        required and must be a set count the routine trains the exercise at
-        (its own slots or the slots where it is an alternative); send one
-        draft per set count.
+        Requires recommendations:write. Each draft is applied at once: its
+        load, rep goal and split become the target for the exercise at
+        target_sets, a set count the routine uses for it (own slot or as an
+        alternative). One draft per set count.
       operationId: createRecommendationDrafts
       requestBody:
         required: true
