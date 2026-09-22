@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Assistant;
 use App\Enums\RecommendationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Exercise;
+use App\Models\ExerciseTarget;
 use App\Models\PersonalRecord;
 use App\Models\ProgressionRecommendation;
 use App\Models\WorkoutExercise;
@@ -30,8 +31,7 @@ class AssistantController extends Controller
         }
 
         $exercises = $day->exercises->where('exercise.metric_type', '!=', null)->map(function ($re) use ($user) {
-            $pending = ProgressionRecommendation::where('user_id', $user->id)
-                ->where('exercise_id', $re->exercise_id)->where('status', 'pending')->latest()->first();
+            $latest = $this->latestRecommendation($user->id, $re->exercise_id, (int) $re->target_sets);
 
             return [
                 'exercise' => $this->exerciseBrief($re->exercise),
@@ -43,13 +43,65 @@ class AssistantController extends Controller
                     'rir_min' => $re->target_rir_min, 'rir_max' => $re->target_rir_max, 'rest_seconds' => $re->rest_seconds,
                 ],
                 'last_performance' => $this->lastPerformance($user->id, $re->exercise_id),
-                'pending_recommendation' => $pending ? $this->recommendationBrief($pending) : null,
+                'latest_recommendation' => $latest ? $this->recommendationBrief($latest) : null,
             ];
         })->values();
 
         return response()->json([
             'date' => now()->toDateString(), 'is_training_day' => $day->day_type === 'training',
             'day' => ['name' => $day->name, 'type' => $day->day_type], 'exercises' => $exercises,
+        ]);
+    }
+
+    /**
+     * The whole active routine: every slot with the set count it plans, the
+     * alternatives allowed there and the goal stored for each (exercise, set
+     * count). The same exercise can appear at different set counts, so goals
+     * and recommendations are per count.
+     */
+    public function routine(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $routine = $user->routines()->where('is_active', true)
+            ->with(['days.exercises.exercise.muscleGroups', 'days.exercises.exercise.alternativeExercises:id,name'])->first();
+
+        if (! $routine) {
+            return response()->json(['routine' => null, 'days' => [], 'exercise_targets' => [], 'multi_set_exercises' => []]);
+        }
+
+        $slots = $routine->days->flatMap->exercises;
+
+        return response()->json([
+            'routine' => ['id' => $routine->id, 'name' => $routine->name],
+            'days' => $routine->days->map(fn ($day) => [
+                'name' => $day->name, 'weekday' => $day->weekday, 'type' => $day->day_type,
+                'exercises' => $day->exercises->map(fn ($re) => [
+                    'routine_exercise_id' => $re->id, 'position' => $re->position, 'priority' => $re->priority,
+                    'exercise' => $this->exerciseBrief($re->exercise),
+                    'target' => [
+                        'sets' => $re->target_sets, 'min_reps' => $re->minimum_reps, 'max_reps' => $re->maximum_reps,
+                        'progression_target_total_reps' => $re->progression_target_total_reps,
+                        'target_weight' => $this->decimal($re->target_weight), 'weight_unit' => $re->weight_unit,
+                        'rest_seconds' => $re->rest_seconds,
+                    ],
+                    'alternatives' => $re->exercise->alternativeExercises->map(fn ($a) => ['id' => $a->id, 'name' => $a->name])->values(),
+                ])->values(),
+            ])->values(),
+            'exercise_targets' => ExerciseTarget::where('user_id', $user->id)->with('exercise:id,name')
+                ->orderBy('exercise_id')->orderBy('target_sets')->get()->map(fn ($t) => [
+                    'exercise' => ['id' => $t->exercise_id, 'name' => $t->exercise?->name],
+                    'sets' => $t->target_sets, 'target_weight' => $this->decimal($t->target_weight), 'weight_unit' => $t->weight_unit,
+                    'target_total_reps' => $t->target_total_reps, 'rep_distribution' => $t->rep_distribution,
+                    'updated_at' => optional($t->updated_at)->toIso8601String(),
+                ])->values(),
+            // Exercises the routine plans at more than one set count: drafts for
+            // them must say which count (target_sets) they are for.
+            'multi_set_exercises' => $slots->groupBy('exercise_id')
+                ->filter(fn ($group) => $group->pluck('target_sets')->unique()->count() > 1)
+                ->map(fn ($group) => [
+                    'exercise' => ['id' => $group->first()->exercise_id, 'name' => $group->first()->exercise->name],
+                    'set_counts' => $group->pluck('target_sets')->unique()->sort()->values(),
+                ])->values(),
         ]);
     }
 
@@ -64,7 +116,7 @@ class AssistantController extends Controller
         $sessions = $request->user()->workouts()
             ->whereIn('status', ['completed', 'partial'])
             ->when($data['since'] ?? null, fn ($q, $since) => $q->whereDate('started_at', '>=', $since))
-            ->with(['exercises.performedExercise:id,name', 'exercises.sets', 'routineDay:id,name'])
+            ->with(['exercises.performedExercise:id,name', 'exercises.plannedExercise:id,name', 'exercises.routineExercise:id,target_sets', 'exercises.sets', 'routineDay:id,name'])
             ->latest('started_at')->limit($limit)->get();
 
         $payload = $sessions->map(fn ($s) => [
@@ -74,6 +126,8 @@ class AssistantController extends Controller
             'exercises' => $s->exercises->map(fn ($we) => [
                 'exercise' => ['id' => $we->performed_exercise_id, 'name' => $we->performedExercise?->name],
                 'was_substituted' => (bool) $we->was_substituted,
+                'planned_exercise' => $we->was_substituted ? ['id' => $we->planned_exercise_id, 'name' => $we->plannedExercise?->name] : null,
+                'planned_sets' => $we->routineExercise?->target_sets,
                 'working_sets' => $we->sets->where('completed', true)->where('set_type', 'working')->sortBy('set_number')
                     ->map(fn ($set) => $this->setBrief($set))->values(),
             ])->values(),
@@ -88,7 +142,8 @@ class AssistantController extends Controller
 
         $exposures = WorkoutExercise::where('performed_exercise_id', $exercise->id)
             ->whereHas('session', fn ($q) => $q->where('user_id', $request->user()->id)->whereIn('status', ['completed', 'partial']))
-            ->with(['sets' => fn ($q) => $q->where('completed', true)->where('set_type', 'working'), 'session:id,started_at'])
+            ->with(['sets' => fn ($q) => $q->where('completed', true)->where('set_type', 'working'), 'session:id,started_at,routine_day_id',
+                'session.routineDay:id,name', 'routineExercise:id,target_sets'])
             ->oldest('id')->get();
 
         $series = $exposures->map(function ($exposure) {
@@ -97,6 +152,10 @@ class AssistantController extends Controller
 
             return [
                 'date' => optional($exposure->session->started_at)->toDateString(),
+                'day' => $exposure->session->routineDay?->name,
+                'was_substituted' => (bool) $exposure->was_substituted,
+                'planned_sets' => $exposure->routineExercise?->target_sets,
+                'working_sets' => $sets->sortBy('set_number')->map(fn ($set) => $this->setBrief($set))->values(),
                 'max_weight' => (float) $sets->max('weight'),
                 'best_set' => $best ? ['weight' => $this->decimal($best->weight), 'reps' => (int) $best->repetitions, 'volume' => (float) $best->volume] : null,
                 'total_repetitions' => (int) $sets->sum('repetitions'),
@@ -176,7 +235,8 @@ class AssistantController extends Controller
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $status = $data['status'] ?? RecommendationStatus::Pending->value;
+        // Published recommendations apply at once, so "accepted" is what is in effect.
+        $status = $data['status'] ?? RecommendationStatus::Accepted->value;
         $query = ProgressionRecommendation::where('user_id', $request->user()->id)
             ->with('exercise:id,name')->latest();
 
@@ -219,6 +279,15 @@ class AssistantController extends Controller
         ];
     }
 
+    /** Latest recommendation in effect for the exercise at that set count. */
+    private function latestRecommendation(int $userId, int $exerciseId, int $sets): ?ProgressionRecommendation
+    {
+        return ProgressionRecommendation::where('user_id', $userId)->where('exercise_id', $exerciseId)
+            ->whereIn('status', [RecommendationStatus::Accepted->value, RecommendationStatus::Modified->value])
+            ->where(fn ($q) => $q->whereNull('target_sets')->orWhere('target_sets', $sets))
+            ->latest('id')->first();
+    }
+
     private function setBrief($set): array
     {
         return [
@@ -232,6 +301,7 @@ class AssistantController extends Controller
     {
         return [
             'id' => $r->id, 'type' => $r->recommendation_type, 'confidence' => $r->confidence, 'reason' => $r->reason,
+            'target_sets' => $r->target_sets,
             'current_weight' => $this->decimal($r->current_weight), 'suggested_weight' => $this->decimal($r->suggested_weight),
             'suggested_total_repetitions' => $r->suggested_total_repetitions,
             'suggested_rep_distribution' => $r->suggested_rep_distribution, 'weight_unit' => $r->weight_unit,

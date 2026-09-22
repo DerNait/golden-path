@@ -3,10 +3,12 @@ info:
   title: Golden Path Assistant API
   description: >-
     Read-only training and body-composition context plus a write endpoint to
-    submit recommendation drafts that the owner reviews inside Golden Path.
-    All endpoints are scoped to the authenticated token's user. Drafts never
-    modify the routine, history or goals automatically.
-  version: 1.0.0
+    publish progression recommendations. The assistant is the only source of
+    recommendations: each one applies as soon as it is published and becomes
+    the target of the next session for the set count it was written for.
+    All endpoints are scoped to the authenticated token's user. History is
+    never modified.
+  version: 1.1.0
 servers:
   - url: https://gym.dernait.com/api/v1/assistant
 security:
@@ -16,7 +18,7 @@ paths:
     get:
       tags:
         - training
-      summary: Today's training day with targets, last performance and pending recommendations
+      summary: Today's training day with targets, last performance and the recommendation in effect
       description: Requires the training:read ability.
       operationId: getToday
       responses:
@@ -26,6 +28,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TodayResponse"
+  /routine:
+    get:
+      tags:
+        - training
+      summary: The whole active routine with set counts, alternatives and stored goals per set count
+      description: >-
+        Requires the training:read ability. The same exercise can be planned
+        at different set counts (for example 3 sets on Lower A and 2 on Lower
+        B) or trained as an alternative in another exercise's slot. Goals are
+        kept per (exercise, set count); every recommendation states its
+        target_sets, and multi_set_exercises lists the exercises that need one
+        recommendation per set count.
+      operationId: getRoutine
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutineResponse"
   /workouts/recent:
     get:
       tags:
@@ -114,17 +136,18 @@ paths:
         - recommendations
       summary: Recommendations with reasoning, filterable by status
       description: >-
-        Requires the training:read ability. Status defaults to pending and
-        accepts "all", a single state or several comma-separated values.
+        Requires the training:read ability. Status defaults to accepted (the
+        recommendations in effect) and accepts "all", a single state or
+        several comma-separated values.
       operationId: getRecommendations
       parameters:
         - name: status
           in: query
           required: false
-          description: pending, accepted, modified, ignored, superseded, all, or a comma-separated list.
+          description: accepted, modified, pending, ignored, superseded, all, or a comma-separated list.
           schema:
             type: string
-            default: pending
+            default: accepted
         - name: limit
           in: query
           required: false
@@ -147,11 +170,14 @@ paths:
     post:
       tags:
         - recommendations
-      summary: Submit recommendation drafts for the owner to review
+      summary: Publish recommendations; they apply immediately
       description: >-
-        Requires the recommendations:write ability. Each draft supersedes the
-        pending recommendation for its exercise and is stored as pending; the
-        owner accepts, modifies or ignores it inside Golden Path.
+        Requires the recommendations:write ability. Each draft is stored as
+        accepted and applied at once: its load, repetition goal and split
+        become the target for its exercise at target_sets. target_sets is
+        required and must be a set count the routine trains the exercise at
+        (its own slots or the slots where it is an alternative); send one
+        draft per set count.
       operationId: createRecommendationDrafts
       requestBody:
         required: true
@@ -161,7 +187,7 @@ paths:
               $ref: "#/components/schemas/RecommendationDraftRequest"
       responses:
         "201":
-          description: drafts created
+          description: recommendations published and applied
           content:
             application/json:
               schema:
@@ -222,6 +248,9 @@ components:
           type: string
         reason:
           type: string
+        target_sets:
+          type: integer
+          description: Set count the recommendation was written for; null on older ones.
         current_weight:
           type: number
         suggested_weight:
@@ -236,7 +265,7 @@ components:
           type: string
         source:
           type: string
-          description: engine or assistant.
+          description: assistant (older ones may say engine, the retired automatic engine).
         status:
           type: string
         accepted_at:
@@ -277,8 +306,9 @@ components:
           $ref: "#/components/schemas/PlannedTarget"
         last_performance:
           $ref: "#/components/schemas/LastPerformance"
-        pending_recommendation:
+        latest_recommendation:
           $ref: "#/components/schemas/Recommendation"
+          description: Latest recommendation in effect for this exercise at this slot's set count.
     TodayResponse:
       type: object
       properties:
@@ -298,6 +328,100 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TodayExercise"
+    RoutineSlot:
+      type: object
+      properties:
+        routine_exercise_id:
+          type: integer
+        position:
+          type: integer
+        priority:
+          type: string
+        exercise:
+          $ref: "#/components/schemas/ExerciseBrief"
+        target:
+          $ref: "#/components/schemas/PlannedTarget"
+        alternatives:
+          type: array
+          description: Exercises allowed in this slot; performed there they use this slot's set count.
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+    ExerciseTarget:
+      type: object
+      properties:
+        exercise:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+        sets:
+          type: integer
+        target_weight:
+          type: number
+        weight_unit:
+          type: string
+        target_total_reps:
+          type: integer
+        rep_distribution:
+          type: array
+          items:
+            type: integer
+        updated_at:
+          type: string
+    RoutineResponse:
+      type: object
+      properties:
+        routine:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+        days:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              weekday:
+                type: integer
+              type:
+                type: string
+              exercises:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RoutineSlot"
+        exercise_targets:
+          type: array
+          description: Stored goal per (exercise, set count), including alternatives.
+          items:
+            $ref: "#/components/schemas/ExerciseTarget"
+        multi_set_exercises:
+          type: array
+          description: Exercises planned at more than one set count; publish one draft per count.
+          items:
+            type: object
+            properties:
+              exercise:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+              set_counts:
+                type: array
+                items:
+                  type: integer
     SessionExercise:
       type: object
       properties:
@@ -305,6 +429,17 @@ components:
           $ref: "#/components/schemas/ExerciseBrief"
         was_substituted:
           type: boolean
+        planned_exercise:
+          type: object
+          description: The exercise the slot planned, when an alternative was performed.
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+        planned_sets:
+          type: integer
+          description: Sets the routine asked for in that slot.
         working_sets:
           type: array
           items:
@@ -350,6 +485,18 @@ components:
         date:
           type: string
           format: date
+        day:
+          type: string
+          description: Routine day of the session, for example Lower A.
+        was_substituted:
+          type: boolean
+        planned_sets:
+          type: integer
+          description: Sets the routine asked for in that slot.
+        working_sets:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkingSet"
         max_weight:
           type: number
         best_set:
@@ -502,6 +649,7 @@ components:
       type: object
       required:
         - exercise_id
+        - target_sets
         - recommendation_type
         - confidence
         - reason
@@ -511,6 +659,15 @@ components:
         exercise_id:
           type: integer
           description: Must belong to the athlete.
+        target_sets:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: >-
+            Set count this recommendation is for. Must be one the routine
+            trains the exercise at (see getRoutine); for an alternative, the
+            set count of the slot it is performed in. Exercises trained at
+            several counts (multi_set_exercises) need one draft per count.
         recommendation_type:
           type: string
           enum:
@@ -551,7 +708,8 @@ components:
             maximum: 100
           description: >-
             Ideal repetitions per set, for example [10,10,9]. Must add up to
-            suggested_total_repetitions when both are sent; alone it defines the total.
+            suggested_total_repetitions when both are sent; alone it defines the
+            total. With target_sets it must have exactly that many values.
         data_period:
           type: string
           maxLength: 100
@@ -580,8 +738,16 @@ components:
           type: integer
         exercise_id:
           type: integer
+        target_sets:
+          type: integer
         status:
           type: string
+          description: Always accepted.
+        applied:
+          type: boolean
+        current_weight:
+          type: number
+          description: Target load in effect before this recommendation.
         type:
           type: string
         confidence:
@@ -601,6 +767,8 @@ components:
     RecommendationDraftsCreated:
       type: object
       properties:
+        message:
+          type: string
         created:
           type: array
           items:

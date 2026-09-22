@@ -2,23 +2,23 @@
 
 namespace App\Services\Workouts;
 
-use App\Enums\RecommendationStatus;
 use App\Models\Exercise;
-use App\Models\ProgressionRecommendation;
 use App\Models\RoutineDay;
 use App\Models\User;
 use App\Models\WorkoutExercise;
 use App\Models\WorkoutSession;
 use App\Services\Gamification\GamificationService;
 use App\Services\Progression\ExerciseTargetService;
-use App\Services\Progression\ProgressionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Session lifecycle. Progression advice comes only from the AI assistant,
+ * whose published recommendations are already the targets resolved here.
+ */
 class WorkoutService
 {
     public function __construct(
-        private readonly ProgressionService $progression,
         private readonly GamificationService $gamification,
         private readonly ExerciseTargetService $targets,
     ) {}
@@ -38,13 +38,12 @@ class WorkoutService
                 'name'=>$day->name,'scheduled_for'=>today(),'started_at'=>now(),'status'=>'in_progress','routine_snapshot_json'=>$snapshot,
             ]));
             foreach ($day->exercises as $planned) {
-                $recommendation = $this->progression->recommend($user, $planned->exercise, $planned);
                 $previous = $this->previousPerformance($user, $planned->exercise);
                 $session->exercises()->create([
                     'planned_exercise_id'=>$planned->exercise_id,'performed_exercise_id'=>$planned->exercise_id,
                     'routine_exercise_id'=>$planned->id,'position'=>$planned->position,
                     'planned_snapshot_json'=>$planned->load('exercise.muscleGroups')->toArray(),
-                    'previous_performance_json'=>$previous,'recommendation_snapshot_json'=>$recommendation,
+                    'previous_performance_json'=>$previous,
                     'target_snapshot_json'=>$this->targets->resolve($user,$planned->exercise,$planned),
                 ]);
             }
@@ -66,8 +65,7 @@ class WorkoutService
         $routineExercise = $workoutExercise->routineExercise;
         $workoutExercise->update([
             'performed_exercise_id'=>$alternative->id,'was_substituted'=>! $isRevert,'substitution_reason'=>$isRevert ? null : $reason,
-            'previous_performance_json'=>$this->previousPerformance($user,$alternative),
-            'recommendation_snapshot_json'=>$this->progression->recommend($user,$alternative,$routineExercise),
+            'previous_performance_json'=>$this->previousPerformance($user,$alternative),'recommendation_snapshot_json'=>null,
             'target_snapshot_json'=>$this->targets->resolve($user,$alternative,$routineExercise),
         ]);
         return $workoutExercise->fresh($this->relationsForExercise());
@@ -87,19 +85,6 @@ class WorkoutService
                 'total_volume'=>$sets->sum(fn ($set)=>$set->volume),'working_sets_count'=>$sets->count(),
             ]));
             if (in_array($status,['completed','partial'],true)) {
-                foreach ($session->exercises as $performed) {
-                    if (! $performed->sets->where('completed',true)->where('set_type','working')->count()) continue;
-                    $data = $this->progression->recommend($user,$performed->performedExercise,$performed->routineExercise);
-                    ProgressionRecommendation::where('user_id',$user->id)
-                        ->where('exercise_id',$performed->performed_exercise_id)
-                        ->where('status',RecommendationStatus::Pending->value)
-                        ->update(['status'=>RecommendationStatus::Superseded->value]);
-                    ProgressionRecommendation::create(array_merge($data, [
-                        'user_id'=>$user->id,'exercise_id'=>$performed->performed_exercise_id,
-                        'routine_exercise_id'=>$performed->routine_exercise_id,'source_workout_session_id'=>$session->id,
-                        'weight_unit'=>$performed->routineExercise?->weight_unit,'status'=>'pending','metadata_json'=>['workout_exercise_id'=>$performed->id],
-                    ]));
-                }
                 $this->gamification->rewardWorkout($session->fresh(['exercises.sets','user.profile']));
             }
             return $session->fresh($this->relations());
@@ -108,12 +93,12 @@ class WorkoutService
 
     public function relations(): array
     {
-        return ['user.profile','user.gameProfile','routineDay','exercises.plannedExercise.muscleGroups','exercises.plannedExercise.alternativeExercises','exercises.performedExercise.muscleGroups','exercises.sets','exercises.assistantRecommendation'];
+        return ['user.profile','user.gameProfile','routineDay','exercises.plannedExercise.muscleGroups','exercises.plannedExercise.alternativeExercises','exercises.performedExercise.muscleGroups','exercises.sets','exercises.assistantRecommendations'];
     }
 
     private function relationsForExercise(): array
     {
-        return ['plannedExercise.muscleGroups','plannedExercise.alternativeExercises','performedExercise.muscleGroups','sets','assistantRecommendation'];
+        return ['plannedExercise.muscleGroups','plannedExercise.alternativeExercises','performedExercise.muscleGroups','sets','assistantRecommendations'];
     }
 
     private function previousPerformance(User $user, Exercise $exercise): ?array

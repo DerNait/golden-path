@@ -213,7 +213,7 @@ class AlternativeTargetTest extends TestCase
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/v1/assistant/recommendation-drafts', ['drafts' => [[
-                'exercise_id' => $slot->exercise_id, 'recommendation_type' => 'increase_repetitions',
+                'exercise_id' => $slot->exercise_id, 'target_sets' => 3, 'recommendation_type' => 'increase_repetitions',
                 'confidence' => 'high', 'reason' => 'Reparte asi.', 'suggested_rep_distribution' => [10, 10, 9],
                 'provider' => 'anthropic', 'model' => 'test',
             ]]])->assertCreated()->assertJsonPath('created.0.suggested_total_repetitions', 29);
@@ -245,6 +245,23 @@ class AlternativeTargetTest extends TestCase
         $this->assertSame(25.0, (float) $first['target']['weight']);
         $this->assertSame(3, $first['target']['sets']);
         $this->assertSame('Sube a 29 reps totales.', $first['assistant_recommendation']['reason']);
+    }
+
+    public function test_training_shows_the_recommendation_for_that_days_set_count(): void
+    {
+        $planned = $this->slotFor('Upper A', 1);
+        $planned->update(['target_sets' => 3]);
+        $base = ['user_id' => $this->user->id, 'exercise_id' => $planned->exercise_id, 'recommendation_type' => 'increase_repetitions',
+            'weight_unit' => 'lb', 'confidence' => 'high', 'status' => 'accepted', 'metadata_json' => ['source' => 'assistant']];
+        ProgressionRecommendation::create($base + ['target_sets' => 3, 'reason' => 'Para tres series.']);
+        // Newer, but written for the day that plans two sets.
+        ProgressionRecommendation::create($base + ['target_sets' => 2, 'reason' => 'Para dos series.']);
+
+        $day = RoutineDay::where('name', 'Upper A')->firstOrFail();
+        $session = $this->postJson('/api/workouts/start', ['routine_day_id' => $day->id])->assertCreated()->json('data');
+        $first = collect($session['exercises'])->firstWhere('planned_exercise.id', $planned->exercise_id);
+
+        $this->assertSame('Para tres series.', $first['assistant_recommendation']['reason']);
     }
 
     public function test_substituting_swaps_the_target_to_the_alternative(): void

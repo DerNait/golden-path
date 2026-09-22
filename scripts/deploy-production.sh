@@ -9,8 +9,12 @@ RELEASE_ID="${1:?Usage: SSH_TARGET=root@host $0 RELEASE_ID}"
 IMAGE_NAME="golden-path-app:${RELEASE_ID}"
 ARTIFACT="${ROOT_DIR}/artifacts/golden-path-app-${RELEASE_ID}.tar.gz"
 REMOTE_RELEASE="${BASE_DIR}/releases/${RELEASE_ID}"
-SSH=(ssh -p "${SSH_PORT}" "${SSH_TARGET}")
-RSYNC_SSH="ssh -p ${SSH_PORT}"
+# Optional key for hosts that only accept key authentication.
+SSH_KEY="${SSH_KEY:-}"
+SSH_OPTS=(-p "${SSH_PORT}")
+[[ -n "${SSH_KEY}" ]] && SSH_OPTS+=(-i "${SSH_KEY}" -o IdentitiesOnly=yes)
+SSH=(ssh "${SSH_OPTS[@]}" "${SSH_TARGET}")
+RSYNC_SSH="ssh ${SSH_OPTS[*]}"
 
 test -s "${ARTIFACT}"
 test -s "${ARTIFACT}.sha256"

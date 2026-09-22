@@ -28,7 +28,8 @@ class DashboardController extends Controller
             'active_phase'=>$user->trainingPhases->first(),'latest_measurement'=>$user->bodyMeasurements()->latest('recorded_on')->first(),
             'previous_measurement'=>$user->bodyMeasurements()->latest('recorded_on')->skip(1)->first(),
             'latest_records'=>PersonalRecord::where('user_id',$user->id)->with('exercise')->latest('achieved_at')->limit(5)->get(),
-            'pending_recommendations'=>ProgressionRecommendation::where('user_id',$user->id)->where('status','pending')->with('exercise')->latest()->limit(5)->get(),
+            // Assistant recommendations apply when published; show the ones in effect.
+            'recent_recommendations'=>ProgressionRecommendation::where('user_id',$user->id)->whereIn('status',['accepted','modified'])->where('metadata_json->source','assistant')->with('exercise')->latest()->limit(5)->get(),
             'active_workout_id'=>$user->workouts()->where('status','in_progress')->value('id'),
         ]);
     }

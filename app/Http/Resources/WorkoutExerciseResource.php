@@ -24,7 +24,7 @@ class WorkoutExerciseResource extends JsonResource
             'previous_performance' => $this->previous_performance_json,
             'recommendation' => $this->recommendation_snapshot_json,
             'target' => $this->target_snapshot_json,
-            'assistant_recommendation' => $this->relationLoaded('assistantRecommendation') ? $this->assistantRecommendation : null,
+            'assistant_recommendation' => $this->relationLoaded('assistantRecommendations') ? $this->currentAssistantRecommendation() : null,
             'notes' => $this->notes,
             'sets' => $this->sets,
         ];

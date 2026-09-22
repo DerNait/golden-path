@@ -30,8 +30,10 @@ class RecommendationDraftController extends Controller
         ]);
 
         return response()->json([
+            'message' => 'Recomendaciones publicadas y aplicadas: ya son el objetivo de la proxima sesion.',
             'created' => $created->map(fn ($r) => [
-                'id' => $r->id, 'exercise_id' => $r->exercise_id, 'status' => $r->status,
+                'id' => $r->id, 'exercise_id' => $r->exercise_id, 'target_sets' => $r->target_sets, 'status' => $r->status,
+                'applied' => true, 'current_weight' => $r->current_weight !== null ? (float) $r->current_weight : null,
                 'type' => $r->recommendation_type, 'confidence' => $r->confidence,
                 'suggested_weight' => $r->suggested_weight !== null ? (float) $r->suggested_weight : null,
                 'suggested_total_repetitions' => $r->suggested_total_repetitions,

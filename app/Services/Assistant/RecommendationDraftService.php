@@ -3,20 +3,29 @@
 namespace App\Services\Assistant;
 
 use App\Enums\RecommendationStatus;
+use App\Models\Exercise;
 use App\Models\ProgressionRecommendation;
 use App\Models\RoutineExercise;
 use App\Models\User;
 use App\Models\WorkoutExercise;
+use App\Services\Progression\ExerciseTargetService;
+use App\Services\Progression\RecommendationApplier;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class RecommendationDraftService
 {
+    public function __construct(
+        private readonly ExerciseTargetService $targets,
+        private readonly RecommendationApplier $applier,
+    ) {}
+
     /**
-     * Persist assistant-authored recommendation drafts. Each draft supersedes
-     * the current pending recommendation for its exercise and is stored as a
-     * pending recommendation tagged with source=assistant, so the user reviews
-     * and applies it through the existing accept/modify/ignore flow.
+     * Publish assistant-authored recommendations. The assistant is the only
+     * source of recommendations, so each one applies as soon as it is
+     * published: its load and repetition goal become the target for the set
+     * count it was written for. Anything still pending for the exercise is
+     * superseded.
      *
      * @param  array<int,array<string,mixed>>  $drafts
      */
@@ -24,41 +33,38 @@ class RecommendationDraftService
     {
         return DB::transaction(function () use ($user, $drafts): Collection {
             return collect($drafts)->map(function (array $draft) use ($user): ProgressionRecommendation {
-                $exerciseId = (int) $draft['exercise_id'];
+                $exercise = Exercise::findOrFail((int) $draft['exercise_id']);
+                $sets = isset($draft['target_sets']) ? (int) $draft['target_sets'] : null;
 
-                $lastPerformed = WorkoutExercise::where('performed_exercise_id', $exerciseId)
-                    ->whereHas('session', fn ($q) => $q->where('user_id', $user->id)->whereIn('status', ['completed', 'partial']))
-                    ->latest('id')->first();
-                $lastSessionId = $lastPerformed?->workout_session_id;
-
-                // Exercises trained only as an alternative have no slot of their
-                // own, so fall back to the slot they were last performed in.
-                $routineExercise = RoutineExercise::where('exercise_id', $exerciseId)
-                    ->whereHas('routineDay.routine', fn ($q) => $q->where('user_id', $user->id)->where('is_active', true))
-                    ->orderBy('routine_day_id')->orderBy('position')->first()
-                    ?? $lastPerformed?->routineExercise;
+                $lastPerformed = $this->lastPerformed($user, $exercise, $sets);
+                $routineExercise = $this->slot($user, $exercise, $sets) ?? $lastPerformed?->routineExercise;
+                $current = $this->targets->resolve($user, $exercise, $routineExercise);
 
                 ProgressionRecommendation::where('user_id', $user->id)
-                    ->where('exercise_id', $exerciseId)
+                    ->where('exercise_id', $exercise->id)
                     ->where('status', RecommendationStatus::Pending->value)
                     ->update(['status' => RecommendationStatus::Superseded->value]);
 
-                return ProgressionRecommendation::create([
-                    'user_id' => $user->id,
-                    'exercise_id' => $exerciseId,
-                    'routine_exercise_id' => $routineExercise?->id,
-                    'source_workout_session_id' => $lastSessionId,
-                    'recommendation_type' => $draft['recommendation_type'],
-                    'current_weight' => $routineExercise?->target_weight,
-                    'suggested_weight' => $draft['suggested_weight'] ?? null,
-                    'weight_unit' => $routineExercise?->weight_unit,
+                $total = $draft['suggested_total_repetitions']
                     // A split with no explicit total still states the goal.
-                    'suggested_total_repetitions' => $draft['suggested_total_repetitions']
-                        ?? (isset($draft['suggested_rep_distribution']) ? array_sum($draft['suggested_rep_distribution']) : null),
+                    ?? (isset($draft['suggested_rep_distribution']) ? array_sum($draft['suggested_rep_distribution']) : null);
+
+                $recommendation = ProgressionRecommendation::create([
+                    'user_id' => $user->id,
+                    'exercise_id' => $exercise->id,
+                    'routine_exercise_id' => $routineExercise?->id,
+                    'target_sets' => $sets ?? $routineExercise?->target_sets,
+                    'source_workout_session_id' => $lastPerformed?->workout_session_id,
+                    'recommendation_type' => $draft['recommendation_type'],
+                    'current_weight' => $current['weight'],
+                    'suggested_weight' => $draft['suggested_weight'] ?? null,
+                    'weight_unit' => $current['weight_unit'],
+                    'suggested_total_repetitions' => $total,
                     'suggested_rep_distribution' => $draft['suggested_rep_distribution'] ?? null,
                     'reason' => $draft['reason'],
                     'confidence' => $draft['confidence'],
-                    'status' => RecommendationStatus::Pending->value,
+                    'status' => RecommendationStatus::Accepted->value,
+                    'accepted_at' => now(),
                     'metadata_json' => [
                         'source' => 'assistant',
                         'provider' => $draft['provider'],
@@ -67,7 +73,43 @@ class RecommendationDraftService
                         'generated_at' => now()->toIso8601String(),
                     ],
                 ]);
+
+                $this->applier->apply(
+                    $recommendation,
+                    isset($draft['suggested_weight']) ? (float) $draft['suggested_weight'] : null,
+                    $total !== null ? (int) $total : null,
+                    $draft['suggested_rep_distribution'] ?? null,
+                );
+
+                return $recommendation;
             });
         });
+    }
+
+    /**
+     * The exercise's own slot in the active routine, at the requested set
+     * count when one is given.
+     */
+    private function slot(User $user, Exercise $exercise, ?int $sets): ?RoutineExercise
+    {
+        return RoutineExercise::where('exercise_id', $exercise->id)
+            ->whereHas('routineDay.routine', fn ($q) => $q->where('user_id', $user->id)->where('is_active', true))
+            ->when($sets, fn ($q) => $q->where('target_sets', $sets))
+            ->orderBy('routine_day_id')->orderBy('position')->first();
+    }
+
+    /**
+     * Latest session where the exercise was performed. Exercises trained only
+     * as an alternative have no slot of their own, so the slot they were
+     * performed in stands in; with a set count, prefer a slot asking for it.
+     */
+    private function lastPerformed(User $user, Exercise $exercise, ?int $sets): ?WorkoutExercise
+    {
+        $query = fn () => WorkoutExercise::where('performed_exercise_id', $exercise->id)
+            ->whereHas('session', fn ($q) => $q->where('user_id', $user->id)->whereIn('status', ['completed', 'partial']))
+            ->with('routineExercise')->latest('id');
+
+        return ($sets ? $query()->whereHas('routineExercise', fn ($q) => $q->where('target_sets', $sets))->first() : null)
+            ?? $query()->first();
     }
 }

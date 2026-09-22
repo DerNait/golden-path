@@ -123,21 +123,23 @@ class WorkoutFlowTest extends TestCase
         $this->assertSame($finished['routine_snapshot'],$historical['routine_snapshot']);
     }
 
-    public function test_new_recommendation_supersedes_pending_recommendations_for_the_same_exercise(): void
+    public function test_finishing_a_session_leaves_recommendations_to_the_assistant(): void
     {
         $day=RoutineDay::where('day_type','training')->firstOrFail();
         $started=$this->postJson('/api/workouts/start',['routine_day_id'=>$day->id])->assertCreated()->json('data');
         $exercise=$started['exercises'][0];
-        $old=ProgressionRecommendation::create([
+        $this->assertNull($exercise['recommendation']);
+        $applied=ProgressionRecommendation::create([
             'user_id'=>$this->user->id,
             'exercise_id'=>$exercise['performed_exercise']['id'],
             'routine_exercise_id'=>$exercise['planned']['id'],
-            'recommendation_type'=>'maintain',
-            'current_weight'=>20,
+            'recommendation_type'=>'increase_repetitions',
+            'suggested_total_repetitions'=>24,
             'weight_unit'=>'lb',
-            'reason'=>'Recomendacion anterior.',
+            'reason'=>'Recomendacion de la IA.',
             'confidence'=>'medium',
-            'status'=>'pending',
+            'status'=>'accepted',
+            'metadata_json'=>['source'=>'assistant'],
         ]);
 
         $this->postJson("/api/workout-exercises/{$exercise['id']}/sets",[
@@ -145,12 +147,7 @@ class WorkoutFlowTest extends TestCase
         ])->assertCreated();
         $this->postJson("/api/workouts/{$started['id']}/finish",[])->assertOk();
 
-        $this->assertSame('superseded',$old->fresh()->status);
-        $this->assertDatabaseHas('progression_recommendations',[
-            'user_id'=>$this->user->id,
-            'exercise_id'=>$exercise['performed_exercise']['id'],
-            'source_workout_session_id'=>$started['id'],
-            'status'=>'pending',
-        ]);
+        $this->assertSame('accepted',$applied->fresh()->status);
+        $this->assertSame(1,ProgressionRecommendation::where('user_id',$this->user->id)->count());
     }
 }
