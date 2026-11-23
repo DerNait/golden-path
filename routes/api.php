@@ -28,6 +28,7 @@ Route::prefix('v1/assistant')->middleware(['auth:sanctum', 'throttle:assistant']
     Route::middleware('abilities:training:read')->group(function (): void {
         Route::get('/today', [AssistantController::class, 'today']);
         Route::get('/routine', [AssistantController::class, 'routine']);
+        Route::get('/exercises', [AssistantController::class, 'exercises']);
         Route::get('/workouts/recent', [AssistantController::class, 'recentWorkouts']);
         Route::get('/exercises/{exercise}/history', [AssistantController::class, 'exerciseHistory']);
         Route::get('/training-context', [AssistantController::class, 'trainingContext']);

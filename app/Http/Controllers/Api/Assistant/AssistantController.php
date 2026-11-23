@@ -11,6 +11,7 @@ use App\Models\ProgressionRecommendation;
 use App\Models\WorkoutExercise;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use App\Services\Workouts\RotationService;
 
 /**
@@ -106,6 +107,40 @@ class AssistantController extends Controller
                     'set_counts' => $group->pluck('target_sets')->unique()->sort()->values(),
                 ])->values(),
         ]);
+    }
+
+    /**
+     * The athlete's exercise library with how often each one was really
+     * performed, so a swap can prefer movements that already have history.
+     */
+    public function exercises(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $performed = DB::table('workout_exercises as we')
+            ->join('workout_sessions as s', 's.id', '=', 'we.workout_session_id')
+            ->where('s.user_id', $user->id)->whereIn('s.status', ['completed', 'partial'])
+            // Only exposures where at least one working set was really logged.
+            ->whereExists(fn ($q) => $q->selectRaw('1')->from('workout_sets as ws')
+                ->whereColumn('ws.workout_exercise_id', 'we.id')->where('ws.completed', true)->where('ws.set_type', '!=', 'warmup'))
+            ->groupBy('we.performed_exercise_id')
+            ->selectRaw('we.performed_exercise_id as id, COUNT(*) as exposures, MAX(s.started_at) as last_at')
+            ->get()->keyBy('id');
+
+        $data = Exercise::where('user_id', $user->id)->when(! $request->boolean('include_inactive'), fn ($q) => $q->where('is_active', true))
+            ->with('muscleGroups')->orderBy('name')->get()->map(function ($exercise) use ($performed) {
+                $stats = $performed->get($exercise->id);
+
+                return [
+                    'id' => $exercise->id, 'name' => $exercise->name, 'equipment' => $exercise->equipment,
+                    'metric_type' => $exercise->metric_type, 'weight_mode' => $exercise->weight_mode, 'unit' => $exercise->default_weight_unit,
+                    'muscle' => $exercise->muscleGroups->firstWhere('pivot.is_primary', true)?->name ?? $exercise->muscleGroups->first()?->name,
+                    'times_performed' => (int) ($stats->exposures ?? 0),
+                    'last_performed' => $stats ? substr((string) $stats->last_at, 0, 10) : null,
+                    'is_active' => (bool) $exercise->is_active,
+                ];
+            })->sortByDesc('times_performed')->values();
+
+        return response()->json(['data' => $data]);
     }
 
     public function recentWorkouts(Request $request): JsonResponse

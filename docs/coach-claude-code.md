@@ -34,6 +34,7 @@ H="Authorization: Bearer $ASSISTANT_TOKEN"
 | Quiero… | Llamada |
 |---|---|
 | Ver qué toca y el estado del día | `GET /today`, `GET /summary?date=YYYY-MM-DD` |
+| Elegir un reemplazo (con cuántas veces se ha hecho) | `GET /exercises` |
 | Ajustar carga/reps objetivo de la próxima sesión | `POST /recommendation-drafts` (una por ejercicio y cantidad de series) |
 | Cambiar series, reps, descanso o prioridad de un ejercicio | `PUT /routine/exercises/{id}` con `reason` |
 | Cambiar un ejercicio por otro (molestia, máquina no disponible) | `PUT /routine/exercises/{id}` con `exercise_id` nuevo y `reason` |

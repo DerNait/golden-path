@@ -202,6 +202,25 @@ class CoachFeaturesTest extends TestCase
         ])->assertForbidden();
     }
 
+    public function test_assistant_lists_the_library_with_real_usage(): void
+    {
+        $this->actingAs($this->user);
+        $day = $this->trainingDays()->first();
+        $started = $this->postJson('/api/workouts/start', ['routine_day_id' => $day->id])->assertCreated()->json('data');
+        $performed = $started['exercises'][0]['performed_exercise'];
+        $this->postJson("/api/workout-exercises/{$started['exercises'][0]['id']}/sets", [
+            'set_number' => 1, 'set_type' => 'working', 'weight' => 20, 'weight_unit' => 'lb', 'repetitions' => 10, 'rir' => 2, 'completed' => true,
+        ])->assertCreated();
+        $this->postJson("/api/workouts/{$started['id']}/finish")->assertOk();
+
+        $response = $this->bearer(['training:read'])->getJson('/api/v1/assistant/exercises')->assertOk();
+        $first = $response->json('data.0');
+        $this->assertSame($performed['id'], $first['id'], 'first: '.json_encode(array_slice($response->json('data'), 0, 2)));
+        $this->assertSame(1, $first['times_performed']);
+        $this->assertSame(now()->toDateString(), $first['last_performed']);
+        $this->assertArrayHasKey('muscle', $first);
+    }
+
     // ---- weekly volume ----------------------------------------------------
 
     public function test_weekly_volume_counts_only_direct_working_sets_per_muscle(): void

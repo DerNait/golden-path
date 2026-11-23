@@ -93,6 +93,7 @@ curl -s -H "Authorization: Bearer $TOKEN" "$BASE/recommendations?status=all&limi
 | `GET /today` | The session that is **next in the rotation** (Upper A → Lower A → Upper B → Lower B, whatever the weekday; the cycle restarts after 14 days without training) and, per planned exercise, its target, last performance and the recommendation in effect for that set count. `trained_today` says whether a session was already done today |
 | `GET /summary?date=` | One call for a day: sessions with their sets and check-in, the notes/changes of that date and the next session |
 | `GET /notes` | Notes, summaries and routine changes (`since`, `kind`, `limit`) |
+| `GET /exercises` | The exercise library with `times_performed` and `last_performed` for each, so swaps can prefer movements that already have history (`include_inactive=1` to list archived ones) |
 | `GET /routine` | The whole active routine: every slot with its set count and rep range, the alternatives allowed there, the stored goal per (exercise, set count) and `multi_set_exercises` (exercises planned at more than one set count) |
 | `GET /workouts/recent` | Recent completed/partial sessions with the working sets of each exercise, the planned set count and, for alternatives, the planned exercise (`limit`, `since`) |
 | `GET /exercises/{id}/history` | Per-exposure series for one exercise: day, planned set count, working sets, max weight, best set, volume, estimated 1RM, average RIR, records |
