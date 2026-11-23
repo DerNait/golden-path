@@ -14,7 +14,7 @@ import { errorMessage } from '../utils/errors';
 import { formatDay } from '../utils/dates';
 
 const store=useWorkoutStore(); const notifications=useNotificationStore(); const route=useRoute(); const router=useRouter();
-const routine=ref(null); const loading=ref(true); const checkInOpen=ref(false); const finishOpen=ref(false); const alternativeOpen=ref(false); const detailOpen=ref(false); const selectedDay=ref(null); const timer=ref(null); const quickMode=ref(false); const elapsedSeconds=ref(0); let elapsedTicker=null;
+const routine=ref(null); const loading=ref(true); const checkInOpen=ref(false); const finishOpen=ref(false); const alternativeOpen=ref(false); const listOpen=ref(false); const detailOpen=ref(false); const selectedDay=ref(null); const timer=ref(null); const quickMode=ref(false); const elapsedSeconds=ref(0); let elapsedTicker=null;
 const checkIn=reactive({routine_day_id:null,sleep_hours:null,energy_level:null,motivation_level:null,discomfort_notes:null}); const feedback=reactive({session_difficulty:null,session_satisfaction:null,is_atypical:false,atypical_reason:null,notes:null});
 const current=computed(()=>store.currentExercise); const planned=computed(()=>current.value?.planned||{}); const exercise=computed(()=>current.value?.performed_exercise||{});
 const visibleExercises=computed(()=>store.session?.exercises?.filter(item=>!quickMode.value||item.planned?.priority!=='optional')||[]);
@@ -27,6 +27,8 @@ const visibleIndex=computed(()=>Math.max(0,visibleExercises.value.findIndex(item
 const completedExerciseCount=computed(()=>visibleExercises.value.filter(item=>(item.sets||[]).some(set=>set.completed&&set.set_type!=='warmup')).length);
 const pendingExerciseCount=computed(()=>Math.max(0,visibleExercises.value.length-completedExerciseCount.value));
 const preliminaryRecords=computed(()=>completedSets.value.filter(set=>set.is_personal_record).length);
+const exerciseList=computed(()=>(store.session?.exercises||[]).map((item,index)=>({item,index})).filter(({item})=>!quickMode.value||item.planned?.priority!=='optional').map(({item,index})=>{const done=(item.sets||[]).filter(set=>set.completed&&set.set_type!=='warmup').length;const target=item.planned?.target_sets||0;return{index,id:item.id,name:item.performed_exercise?.name,muscles:item.performed_exercise?.muscle_groups?.map(group=>group.name).join(', '),done,target,complete:target>0?done>=target:done>0,started:done>0,substituted:item.was_substituted,optional:item.planned?.priority==='optional',current:index===store.currentIndex};}));
+function goTo(index){store.goTo(index);listOpen.value=false;window.scrollTo({top:0,behavior:'smooth'});}
 const elapsedLabel=computed(()=>`${String(Math.floor(elapsedSeconds.value/60)).padStart(2,'0')}:${String(elapsedSeconds.value%60).padStart(2,'0')}`);
 async function initialize(){ try { await store.restore(); if(!store.session){routine.value=(await api.get('/routine')).data.data; const day=routine.value.days.find(item=>item.id===Number(route.query.day)); if(day)openCheckIn(day);} } catch(e){notifications.push(errorMessage(e),'error');} finally{loading.value=false;} }
 function openCheckIn(day){selectedDay.value=day; checkIn.routine_day_id=day.id; checkInOpen.value=true;}
@@ -52,14 +54,14 @@ onBeforeUnmount(()=>{clearInterval(elapsedTicker);document.removeEventListener('
     <LoadingSkeleton v-if="loading"/>
     <template v-else-if="!store.session">
       <header class="page-header"><div><div class="eyebrow">Entrenamiento</div><h1>Elige una sesión</h1><p>Puedes recuperar una sesión aunque no corresponda al día de hoy.</p></div></header>
-      <div v-if="routine" class="day-list"><article v-for="day in routine.days.filter(item=>item.day_type==='training')" :key="day.id" class="day-card"><header><div><h3>{{ day.name }}</h3><small>{{ day.exercises.length }} ejercicios · {{ day.estimated_minutes }} min</small></div><button class="btn btn-primary" @click="openCheckIn(day)"><i class="fa-solid fa-play"/>Iniciar</button></header></article></div>
+      <div v-if="routine" class="day-list"><article v-for="day in routine.days.filter(item=>item.day_type==='training')" :key="day.id" class="day-card" :class="{next:day.id===routine.next_day_id}"><header><div><h3>{{ day.name }}<span v-if="day.id===routine.next_day_id" class="badge-soft green ms-2 align-middle">Te toca</span></h3><small>{{ day.exercises.length }} ejercicios · {{ day.estimated_minutes }} min</small></div><button class="btn btn-primary" @click="openCheckIn(day)"><i class="fa-solid fa-play"/>Iniciar</button></header></article></div>
       <EmptyState v-else title="No hay rutina activa" text="Configura al menos un día de entrenamiento antes de iniciar." icon="fa-list-check"/>
     </template>
     <template v-else-if="current">
       <div class="workout-top">
         <div class="workout-top-row">
           <div><strong>{{ store.session.name }}</strong><small><i class="fa-solid fa-stopwatch me-1" />{{ elapsedLabel }} · {{ Math.round((store.session.routine_snapshot?.day?.estimated_minutes||75)*(quickMode ? 0.78 : 1)) }} min est.</small></div>
-          <div class="workout-step">{{ visibleIndex+1 }}<small> de {{ visibleExercises.length }}</small></div>
+          <button class="workout-step" type="button" aria-haspopup="dialog" aria-label="Ver lista de ejercicios" @click="listOpen=true"><span>{{ visibleIndex+1 }}<small> de {{ visibleExercises.length }}</small></span><i class="fa-solid fa-list-ul" /></button>
         </div>
         <div class="progress-track" role="progressbar" :aria-valuenow="visibleIndex+1" aria-valuemin="1" :aria-valuemax="Math.max(1,visibleExercises.length)" aria-label="Avance del entrenamiento"><span :style="{width:`${(visibleIndex+1)/Math.max(1,visibleExercises.length)*100}%`}" /></div>
         <label class="quick-switch form-check form-switch"><input v-model="quickMode" class="form-check-input" type="checkbox" role="switch" @change="applyQuickMode" />Modo rápido <span class="text-secondary">(oculta los opcionales)</span></label>
@@ -134,6 +136,17 @@ onBeforeUnmount(()=>{clearInterval(elapsedTicker);document.removeEventListener('
       <div class="d-flex justify-content-center mt-3"><button class="btn btn-danger-soft" @click="cancel"><i class="fa-solid fa-xmark" />Cancelar sesión</button></div>
     </template>
 
+    <BaseModal :open="listOpen" title="Ejercicios de hoy" @close="listOpen=false">
+      <ol class="jump-list">
+        <li v-for="(row,position) in exerciseList" :key="row.id">
+          <button type="button" class="jump-row" :class="{current:row.current,complete:row.complete}" :aria-current="row.current?'step':undefined" @click="goTo(row.index)">
+            <span class="jump-num">{{ position+1 }}</span>
+            <span class="jump-info"><strong>{{ row.name }}</strong><small>{{ row.muscles||'Grupo muscular sin especificar' }}<template v-if="row.substituted"> · alternativa</template><template v-if="row.optional"> · opcional</template></small></span>
+            <span class="jump-progress" :title="`${row.done} de ${row.target} series`"><template v-if="row.complete"><i class="fa-solid fa-check" aria-label="Completado" /></template><template v-else>{{ row.done }}/{{ row.target }}</template></span>
+          </button>
+        </li>
+      </ol>
+    </BaseModal>
     <ExerciseDetailModal :open="detailOpen" :exercise="exercise" @close="detailOpen=false"/>
     <BaseModal :open="checkInOpen" :title="`Iniciar ${selectedDay?.name || 'entrenamiento'}`" @close="checkInOpen=false"><form id="checkin-form" class="field-grid" @submit.prevent="start"><div><label class="form-label">Horas de sueño</label><input v-model.number="checkIn.sleep_hours" class="form-control" type="number" min="0" max="24" step=".5" placeholder="Opcional"/></div><div><label class="form-label">Energía (1-5)</label><input v-model.number="checkIn.energy_level" class="form-control" type="number" min="1" max="5" placeholder="Opcional"/></div><div><label class="form-label">Motivación (1-5)</label><input v-model.number="checkIn.motivation_level" class="form-control" type="number" min="1" max="5" placeholder="Opcional"/></div><div class="grid-column-full"><label class="form-label">Molestias o comentarios</label><textarea v-model="checkIn.discomfort_notes" class="form-control" rows="3" placeholder="Opcional"/></div></form><template #footer><button class="btn btn-outline-light" @click="checkInOpen=false">Cancelar</button><button form="checkin-form" class="btn btn-primary"><i class="fa-solid fa-play"/>Comenzar</button></template></BaseModal>
     <BaseModal :open="alternativeOpen" title="Usar alternativa" @close="alternativeOpen=false"><article v-if="current?.was_substituted" class="exercise-row mb-3"><div class="exercise-thumb"><i class="fa-solid fa-rotate-left"/></div><div class="exercise-info"><h3>{{ current.planned_exercise.name }}</h3><small class="text-secondary">Ejercicio original de la rutina</small></div><button class="btn btn-outline-light" @click="revertToPlanned">Volver</button></article><div v-if="current?.planned_exercise?.alternatives?.length" class="exercise-list"><article v-for="alternative in current.planned_exercise.alternatives" :key="alternative.id" class="exercise-row"><div class="exercise-thumb"><i class="fa-solid fa-shuffle"/></div><div class="exercise-info"><h3>{{ alternative.name }}</h3><select v-model="alternative.reason" class="form-select mt-2"><option value="equipment_busy">Equipo ocupado</option><option value="equipment_unavailable">Equipo no disponible</option><option value="discomfort">Molestia</option><option value="personal_preference">Preferencia personal</option><option value="other">Otro</option></select></div><button class="btn btn-primary" @click="substitute(alternative)">Usar</button></article></div><EmptyState v-else title="Sin alternativas configuradas" text="Agrega alternativas desde la biblioteca de ejercicios." icon="fa-shuffle"/></BaseModal>

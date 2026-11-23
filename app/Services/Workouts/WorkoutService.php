@@ -18,6 +18,10 @@ use Illuminate\Validation\ValidationException;
  */
 class WorkoutService
 {
+    /** Hours without activity after which a late close no longer counts as training time. */
+    private const IDLE_HOURS = 3;
+    private const TAIL_MINUTES = 5;
+
     public function __construct(
         private readonly GamificationService $gamification,
         private readonly ExerciseTargetService $targets,
@@ -81,7 +85,7 @@ class WorkoutService
                 throw ValidationException::withMessages(['session'=>'Registra al menos una serie efectiva antes de completar el entrenamiento.']);
             }
             $session->update(array_merge($feedback, [
-                'status'=>$status,'finished_at'=>now(),'duration_seconds'=>(int) abs($session->started_at->diffInSeconds(now())),
+                'status'=>$status,'finished_at'=>now(),'duration_seconds'=>$this->workoutSeconds($session),
                 'total_volume'=>$sets->sum(fn ($set)=>$set->volume),'working_sets_count'=>$sets->count(),
             ]));
             if (in_array($status,['completed','partial'],true)) {
@@ -89,6 +93,22 @@ class WorkoutService
             }
             return $session->fresh($this->relations());
         });
+    }
+
+    /**
+     * Seconds actually spent training. If the session was left open and closed
+     * much later, the end is the last logged set (plus a short tail), not the
+     * moment the button was pressed.
+     */
+    private function workoutSeconds(WorkoutSession $session): int
+    {
+        $end = now();
+        $lastSet = $session->exercises->flatMap->sets->pluck('completed_at')->filter()->max();
+        if ($lastSet && $lastSet->lt($end->copy()->subHours(self::IDLE_HOURS))) {
+            $end = $lastSet->copy()->addMinutes(self::TAIL_MINUTES);
+        }
+
+        return (int) abs($session->started_at->diffInSeconds($end));
     }
 
     public function relations(): array

@@ -11,6 +11,7 @@ use App\Models\ProgressionRecommendation;
 use App\Models\WorkoutExercise;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Services\Workouts\RotationService;
 
 /**
  * Read-only endpoints for the AI assistant. Responses are summarized and
@@ -22,12 +23,12 @@ class AssistantController extends Controller
     public function today(Request $request): JsonResponse
     {
         $user = $request->user();
-        $routine = $user->routines()->where('is_active', true)->first();
-        $day = $routine?->days()->where('weekday', now()->dayOfWeekIso)
-            ->with('exercises.exercise.muscleGroups')->first();
+        $day = app(RotationService::class)->next($user);
+        $day?->load('exercises.exercise.muscleGroups');
+        $trainedToday = $user->workouts()->whereIn('status', ['completed', 'partial'])->whereDate('started_at', today())->exists();
 
         if (! $day) {
-            return response()->json(['date' => now()->toDateString(), 'is_training_day' => false, 'day' => null, 'exercises' => []]);
+            return response()->json(['date' => now()->toDateString(), 'is_training_day' => false, 'day' => null, 'exercises' => [], 'source' => 'rotation']);
         }
 
         $exercises = $day->exercises->where('exercise.metric_type', '!=', null)->map(function ($re) use ($user) {
@@ -49,7 +50,9 @@ class AssistantController extends Controller
 
         return response()->json([
             'date' => now()->toDateString(), 'is_training_day' => $day->day_type === 'training',
-            'day' => ['name' => $day->name, 'type' => $day->day_type], 'exercises' => $exercises,
+            // The session that is next in the rotation, whatever the weekday.
+            'source' => 'rotation', 'trained_today' => $trainedToday,
+            'day' => ['id' => $day->id, 'name' => $day->name, 'type' => $day->day_type], 'exercises' => $exercises,
         ]);
     }
 

@@ -20,6 +20,7 @@ class RoutineResource extends JsonResource
             ->keyBy('routine_day_id');
 
         return [
+            'next_day_id'=>app(\App\Services\Workouts\RotationService::class)->next($request->user(),$this->resource)?->id,
             'id'=>$this->id,
             'name'=>$this->name,
             'description'=>$this->description,

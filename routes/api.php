@@ -1,7 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\Assistant\AssistantController;
+use App\Http\Controllers\Api\Assistant\NoteController;
 use App\Http\Controllers\Api\Assistant\RecommendationDraftController;
+use App\Http\Controllers\Api\Assistant\RoutineChangeController;
+use App\Http\Controllers\Api\Assistant\SummaryController;
+use App\Http\Controllers\Api\CoachNotesController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BodyMeasurementController;
 use App\Http\Controllers\Api\DashboardController;
@@ -29,6 +33,18 @@ Route::prefix('v1/assistant')->middleware(['auth:sanctum', 'throttle:assistant']
         Route::get('/training-context', [AssistantController::class, 'trainingContext']);
         Route::get('/body-stats', [AssistantController::class, 'bodyStats']);
         Route::get('/recommendations', [AssistantController::class, 'recommendations']);
+        Route::get('/summary', [SummaryController::class, 'show']);
+        Route::get('/notes', [NoteController::class, 'index']);
+    });
+
+    Route::middleware('abilities:notes:write')->group(function (): void {
+        Route::post('/notes', [NoteController::class, 'store']);
+    });
+
+    Route::middleware('abilities:routine:write')->group(function (): void {
+        Route::put('/routine/exercises/{routineExercise}', [RoutineChangeController::class, 'update']);
+        Route::post('/routine/days/{routineDay}/exercises', [RoutineChangeController::class, 'store']);
+        Route::delete('/routine/exercises/{routineExercise}', [RoutineChangeController::class, 'destroy']);
     });
 
     Route::middleware('abilities:recommendations:write')->group(function (): void {
@@ -103,6 +119,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/progression/recommendations/{recommendation}/modify', [ProgressionController::class, 'modify']);
 
     Route::get('/dashboard', DashboardController::class);
+    Route::get('/coach-notes', [CoachNotesController::class, 'index']);
+    Route::get('/progress/weekly-volume', [ProgressController::class, 'weeklyVolume']);
     Route::get('/progress/overview', [ProgressController::class, 'overview']);
     Route::get('/progress/activity-calendar', [ProgressController::class, 'activity']);
     Route::get('/progress/body', [ProgressController::class, 'body']);

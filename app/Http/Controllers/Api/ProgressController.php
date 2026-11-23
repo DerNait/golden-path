@@ -7,6 +7,7 @@ use App\Models\WorkoutExercise;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 class ProgressController extends Controller
 {
     public function overview(Request $request): JsonResponse
@@ -59,5 +60,62 @@ class ProgressController extends Controller
                 'average_rir'=>$sets->whereNotNull('rir')->avg('rir'),'estimated_one_rep_max'=>(float)$sets->max('estimated_one_rep_max')];
         });
         return response()->json(['exercise'=>$exercise->load('muscleGroups'),'calibration'=>['exposures'=>$exposures->count(),'complete'=>$exposures->count()>=2],'series'=>$series,'records'=>PersonalRecord::where('user_id',$request->user()->id)->where('exercise_id',$exercise->id)->get(),'recommendation'=>\App\Models\ProgressionRecommendation::where('user_id',$request->user()->id)->where('exercise_id',$exercise->id)->latest()->first()]);
+    }
+
+    /**
+     * Direct working sets per muscle group per week (Monday to Sunday), against
+     * what the active routine plans for a full cycle. Warm-ups do not count.
+     */
+    public function weeklyVolume(Request $request): JsonResponse
+    {
+        $weeks = (int) ($request->validate(['weeks' => ['nullable', 'integer', 'between:1,12']])['weeks'] ?? 4);
+        $user = $request->user();
+        $thisWeek = CarbonImmutable::now()->startOfWeek();
+        $starts = collect(range($weeks - 1, 0))->map(fn (int $back) => $thisWeek->subWeeks($back));
+
+        $rows = DB::table('workout_sets as ws')
+            ->join('workout_exercises as we', 'we.id', '=', 'ws.workout_exercise_id')
+            ->join('workout_sessions as s', 's.id', '=', 'we.workout_session_id')
+            ->join('exercise_muscle_group as emg', function ($join): void {
+                $join->on('emg.exercise_id', '=', 'we.performed_exercise_id')->where('emg.is_primary', '=', 1);
+            })
+            ->join('muscle_groups as mg', 'mg.id', '=', 'emg.muscle_group_id')
+            ->where('s.user_id', $user->id)->whereIn('s.status', ['completed', 'partial'])
+            ->where('ws.completed', true)->where('ws.set_type', '!=', 'warmup')
+            ->where('s.started_at', '>=', $starts->first()->startOfDay())
+            ->get(['mg.id as muscle_id', 'mg.name as muscle', 's.started_at']);
+
+        $planned = [];
+        $routine = $user->routines()->where('is_active', true)->with(['days' => fn ($q) => $q->where('day_type', 'training'), 'days.exercises.exercise.muscleGroups'])->first();
+        foreach ($routine?->days ?? [] as $day) {
+            foreach ($day->exercises as $slot) {
+                $group = $slot->exercise->muscleGroups->firstWhere('pivot.is_primary', true);
+                if ($group) $planned[$group->id] = ($planned[$group->id] ?? 0) + (int) $slot->target_sets;
+            }
+        }
+
+        $muscles = [];
+        foreach ($rows as $row) {
+            $key = CarbonImmutable::parse($row->started_at)->startOfWeek()->toDateString();
+            $muscles[$row->muscle_id]['name'] = $row->muscle;
+            $muscles[$row->muscle_id]['weeks'][$key] = ($muscles[$row->muscle_id]['weeks'][$key] ?? 0) + 1;
+        }
+        foreach ($routine?->days ?? [] as $day) {
+            foreach ($day->exercises as $slot) {
+                $group = $slot->exercise->muscleGroups->firstWhere('pivot.is_primary', true);
+                if ($group && ! isset($muscles[$group->id])) $muscles[$group->id] = ['name' => $group->name, 'weeks' => []];
+            }
+        }
+
+        $data = collect($muscles)->map(fn (array $item, int $id) => [
+            'id' => $id, 'name' => $item['name'], 'planned' => $planned[$id] ?? 0,
+            'weeks' => $starts->map(fn ($start) => $item['weeks'][$start->toDateString()] ?? 0)->values(),
+        ])->sortByDesc('planned')->values();
+
+        return response()->json([
+            'weeks' => $starts->map->toDateString()->values(),
+            'muscles' => $data,
+            'target' => ['min' => 10, 'max' => 20],
+        ]);
     }
 }

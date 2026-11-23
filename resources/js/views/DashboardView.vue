@@ -5,6 +5,7 @@ import api from '../api/client';
 import AvatarSvg from '../components/avatar/AvatarSvg.vue';
 import LoadingSkeleton from '../components/common/LoadingSkeleton.vue';
 import EmptyState from '../components/common/EmptyState.vue';
+import CoachNotes from '../components/common/CoachNotes.vue';
 import { useNotificationStore } from '../stores/notifications';
 import { errorMessage } from '../utils/errors';
 import { formatDay } from '../utils/dates';
@@ -19,7 +20,7 @@ const xpCurrentLevel = computed(() => 100 * game.value.level * (game.value.level
 const xpPercent = computed(() => Math.min(100, Math.max(0, (game.value.total_xp - xpCurrentLevel.value) / Math.max(1, xpNext.value - xpCurrentLevel.value) * 100)));
 const xpMissing = computed(() => Math.max(0, Math.ceil(xpNext.value - game.value.total_xp)));
 const isTraining = computed(() => data.value?.today?.day_type === 'training');
-const weekdayLabel = computed(() => new Date().toLocaleDateString('es-GT', { weekday: 'long' }));
+const heroKicker = computed(() => (data.value?.trained_today ? 'Siguiente en tu rotación · hoy ya entrenaste' : 'Siguiente en tu rotación'));
 const heroMeta = computed(() => (isTraining.value
   ? `${data.value.today.exercises?.length || 0} ejercicios · ${data.value.today.estimated_minutes || 75} min estimados`
   : 'El descanso planificado también sostiene tu progreso. Puedes recuperar otra sesión si lo necesitas.'));
@@ -49,7 +50,7 @@ onMounted(load);
       <!-- Hoy: la acción principal va primero; el estado del avatar queda debajo en móvil -->
       <section class="surface hero" aria-label="Entrenamiento de hoy">
         <div class="hero-today">
-          <div class="hero-kicker">Hoy · {{ weekdayLabel }}</div>
+          <div class="hero-kicker">{{ heroKicker }}</div>
           <h2>{{ isTraining ? data.today.name : 'Día de recuperación' }}</h2>
           <p class="hero-meta">{{ heroMeta }}</p>
           <div class="hero-actions">
@@ -66,6 +67,11 @@ onMounted(load);
           </div>
           <p v-if="game.energy < 70 && game.total_xp > 0" class="hero-note">Tu energía bajó por la actividad reciente, pero tus fases desbloqueadas siguen siendo tuyas (máxima: {{ maxPhase.name }}). Mantén la constancia para recuperar tu forma activa.</p>
         </div>
+      </section>
+
+      <section v-if="data.coach_notes?.length" class="section-block" aria-label="Notas del entrenador">
+        <div class="section-heading"><div><h2>Notas del entrenador</h2><p>Lo que tu asistente anotó o cambió en tu rutina.</p></div></div>
+        <CoachNotes :notes="data.coach_notes" />
       </section>
 
       <section class="ledger section-block" aria-label="Estado actual">

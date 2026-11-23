@@ -16,6 +16,7 @@ export const useWorkoutStore = defineStore('workout', {
     async substitute(exerciseId, payload) { const updated = (await api.post(`/workout-exercises/${exerciseId}/substitute`, payload)).data.data; this.session.exercises.splice(this.currentIndex, 1, updated); },
     async finish(status, feedback = {}) { const endpoint = status === 'partial' ? 'mark-partial' : 'finish'; const completed = (await api.post(`/workouts/${this.session.id}/${endpoint}`, feedback)).data.data; this.session = null; return completed; },
     async cancel() { await api.post(`/workouts/${this.session.id}/cancel`); this.session = null; },
+    goTo(index) { if (index >= 0 && index < this.exerciseCount) this.currentIndex = index; },
     next() { if (this.currentIndex < this.exerciseCount - 1) this.currentIndex++; },
     previous() { if (this.currentIndex > 0) this.currentIndex--; },
   },

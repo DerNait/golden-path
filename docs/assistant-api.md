@@ -7,7 +7,8 @@ apply immediately inside Golden Path.
 
 - **Base URL:** `https://gym.dernait.com/api/v1/assistant`
 - **Auth:** `Authorization: Bearer <token>` (Sanctum personal access token)
-- **Abilities:** `training:read` for every GET, `recommendations:write` for the recommendation POST
+- **Abilities:** `training:read` for every GET, `recommendations:write` for the recommendation POST,
+  `notes:write` for notes and `routine:write` for routine edits (see section 3b)
 - **OpenAPI schema:** [`assistant-openapi.yaml`](./assistant-openapi.yaml)
 - **Shareable copy:** [`assistant-api-shared.md`](./assistant-api-shared.md) — same guide without any
   credential handling, meant to be uploaded to an external assistant. Keep token
@@ -89,7 +90,9 @@ curl -s -H "Authorization: Bearer $TOKEN" "$BASE/recommendations?status=all&limi
 
 | Endpoint | What it answers |
 |---|---|
-| `GET /today` | Today's day and, per planned exercise, its target, last performance and the recommendation in effect for that set count |
+| `GET /today` | The session that is **next in the rotation** (Upper A → Lower A → Upper B → Lower B, whatever the weekday; the cycle restarts after 14 days without training) and, per planned exercise, its target, last performance and the recommendation in effect for that set count. `trained_today` says whether a session was already done today |
+| `GET /summary?date=` | One call for a day: sessions with their sets and check-in, the notes/changes of that date and the next session |
+| `GET /notes` | Notes, summaries and routine changes (`since`, `kind`, `limit`) |
 | `GET /routine` | The whole active routine: every slot with its set count and rep range, the alternatives allowed there, the stored goal per (exercise, set count) and `multi_set_exercises` (exercises planned at more than one set count) |
 | `GET /workouts/recent` | Recent completed/partial sessions with the working sets of each exercise, the planned set count and, for alternatives, the planned exercise (`limit`, `since`) |
 | `GET /exercises/{id}/history` | Per-exposure series for one exercise: day, planned set count, working sets, max weight, best set, volume, estimated 1RM, average RIR, records |
@@ -164,6 +167,38 @@ exercise performed only as an alternative inherits the sets its slot plans.
 A missing `target_sets`, or one the routine never uses for that exercise, is
 rejected with `422` naming the valid counts.
 
+## 3b. Notes and routine changes (abilities `notes:write`, `routine:write`)
+
+```bash
+# a note or day summary the athlete sees on Inicio and in that day's history
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" $BASE/notes \
+  -d '{"kind":"summary","body":"Upper A completo. Mañana Lower A, empieza ligero.","for_date":"2026-11-24"}'
+
+# change one routine slot (any of: exercise_id, target_sets, minimum_reps, maximum_reps,
+# rest_seconds, priority, target_weight, weight_unit, target_rir_min/max, weight_increment, notes)
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  $BASE/routine/exercises/123 -d '{"target_sets":2,"reason":"Semana 1 de regreso: menos volumen"}'
+
+# add / remove a slot
+curl -s -X POST   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  $BASE/routine/days/4/exercises -d '{"exercise_id":45,"target_sets":3,"minimum_reps":8,"maximum_reps":12,"reason":"Falta volumen de espalda"}'
+curl -s -X DELETE -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  $BASE/routine/exercises/123 -d '{"reason":"Molestia de hombro"}'
+```
+
+- `notes`: `kind` is `note` or `summary`; `for_date` defaults to today; `workout_session_id` is optional.
+- Every routine edit **requires `reason`** and automatically writes a `change` note with the
+  before/after, shown to the athlete under "Notas del entrenador" on Inicio and in the history of that day.
+  Sending the values a slot already has changes nothing and writes no note.
+- Deleting a slot keeps the history of the exercise; the removed slot is stored in the note so it can be re-added.
+- Edits only touch the token owner's routine (`403` otherwise); ranges are validated (`maximum_reps >= minimum_reps`).
+- Create a token with every ability:
+
+```bash
+... php artisan assistant:token claude-code \
+  --abilities=training:read,recommendations:write,notes:write,routine:write --expires=90
+```
+
 ### Notes that matter for good advice
 
 - Assisted machines (assisted pull-ups) use the weight as **assistance**: a
@@ -189,7 +224,8 @@ rejected with `422` naming the valid counts.
 
 5. Test the action with "¿que me toca hoy?" before saving.
 
-For a Claude Code session, just share the base URL, the token and this file.
+For a Claude Code session, see [`coach-claude-code.md`](./coach-claude-code.md): it covers the token, the
+weekly flow, how to change the routine and the training criteria the coach should follow.
 
 ---
 
