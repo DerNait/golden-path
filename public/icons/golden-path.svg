@@ -11,7 +11,7 @@
     </radialGradient>
   </defs>
 
-  <rect width="512" height="512" rx="112" fill="#0b0f14"/>
+  <rect width="512" height="512" rx="112" fill="#0c0b09"/>
   <rect width="512" height="512" rx="112" fill="url(#gp-glow)"/>
 
   <!-- The climb: each step is one more session logged. -->

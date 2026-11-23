@@ -206,20 +206,20 @@ defineExpose({ start, skip });
 </script>
 
 <template>
-  <div class="timer-panel" :class="{ 'timer-finished': hasStarted && remaining === 0 && !running }">
+  <div class="timer-panel" role="timer" :class="{ 'timer-finished': hasStarted && remaining === 0 && !running }">
     <div>
-      <small class="text-secondary d-block">Descanso</small>
-      <div class="timer-display" :class="{ 'text-warning': remaining <= 15 && remaining > 0 }">{{ display }}</div>
+      <small class="timer-label">Descanso</small>
+      <div class="timer-display" :style="remaining <= 15 && remaining > 0 ? { color: '#ecc873' } : null">{{ display }}</div>
     </div>
 
     <div class="timer-actions">
       <div class="timer-controls">
-        <button class="icon-button compact" :title="running ? 'Pausar' : 'Reanudar'" @click="running ? pause() : resume()">
+        <button class="icon-button compact" :title="running ? 'Pausar' : 'Reanudar'" :aria-label="running ? 'Pausar' : 'Reanudar'" @click="running ? pause() : resume()">
           <i class="fa-solid" :class="running ? 'fa-pause' : 'fa-play'"/>
         </button>
-        <button class="icon-button compact" title="Anadir 15 segundos" @click="add"><i class="fa-solid fa-plus"/></button>
-        <button class="icon-button compact" title="Reiniciar" @click="reset"><i class="fa-solid fa-rotate-right"/></button>
-        <button class="icon-button compact" title="Omitir" @click="skip"><i class="fa-solid fa-forward"/></button>
+        <button class="icon-button compact" title="Añadir 15 segundos" aria-label="Añadir 15 segundos" @click="add"><i class="fa-solid fa-plus"/></button>
+        <button class="icon-button compact" title="Reiniciar" aria-label="Reiniciar" @click="reset"><i class="fa-solid fa-rotate-right"/></button>
+        <button class="icon-button compact" title="Omitir" aria-label="Omitir descanso" @click="skip"><i class="fa-solid fa-forward"/></button>
       </div>
 
       <button

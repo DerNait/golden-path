@@ -20,7 +20,7 @@ const weightModeLabels={
   per_dumbbell:'Por mancuerna',
   per_side:'Por lado',
   machine_stack:'Pila de maquina',
-  added_weight:'Peso anadido',
+  added_weight:'Peso añadido',
   bodyweight:'Peso corporal',
   not_applicable:'No aplica',
 };

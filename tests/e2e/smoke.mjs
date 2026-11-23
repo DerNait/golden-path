@@ -34,8 +34,8 @@ async function verify(name, viewport) {
   await page.goto(`${baseUrl}/login`, { waitUntil: 'networkidle' });
   await page.screenshot({ path: path.join(output, `${name}-login.png`), fullPage: true });
   await page.getByLabel('Correo').fill(email);
-  await page.getByLabel('Contrasena').fill(password);
-  await page.getByRole('button', { name: 'Iniciar sesion' }).click();
+  await page.getByLabel('Contraseña', { exact: true }).fill(password);
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await page.waitForURL(`${baseUrl}/`);
   await page.getByRole('heading', { name: /Hola,/ }).waitFor();
   authenticated = true;
@@ -43,7 +43,7 @@ async function verify(name, viewport) {
   const routes = [
     ['dashboard', '/', /Hola,/],
     ['routine', '/routine', /Upper \/ Lower/],
-    ['workout', '/workout', /Elige una sesion/],
+    ['workout', '/workout', /Elige una sesión/],
     ['progress', '/progress', /^Progreso$/],
     ['history', '/history', /^Historial$/],
     ['profile', '/profile', /^Mi perfil$/],

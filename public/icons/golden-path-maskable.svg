@@ -7,7 +7,7 @@
     </linearGradient>
   </defs>
 
-  <rect width="512" height="512" fill="#0b0f14"/>
+  <rect width="512" height="512" fill="#0c0b09"/>
 
   <!-- Same climb, pulled into the safe zone so a circular mask cannot cut it. -->
   <g transform="translate(256 256) scale(0.68) translate(-256 -256)">

@@ -29,8 +29,8 @@ page.on('response', (response) => {
 
 await page.goto(`${baseUrl}/login`);
 await page.getByLabel('Correo').fill(email);
-await page.getByLabel('Contrasena').fill(password);
-await page.getByRole('button', { name: 'Iniciar sesion' }).click();
+await page.getByLabel('Contraseña', { exact: true }).fill(password);
+await page.getByRole('button', { name: 'Iniciar sesión' }).click();
 await page.waitForURL(`${baseUrl}/`);
 await page.getByRole('heading', { name: /Hola,/ }).waitFor();
 authenticated = true;
@@ -49,7 +49,7 @@ let detailOverflow = await page.evaluate(
 if (detailOverflow) errors.push('layout overflow on active exercise detail modal');
 await detailDialog.getByTitle('Cerrar').click();
 
-const newRow = page.locator('.sets-table tbody > tr:not(.set-details)').last();
+const newRow = page.locator('.sets-list > li').last();
 const inputs = newRow.locator('input[type=number]');
 await inputs.nth(0).fill('20');
 await inputs.nth(1).fill('8');
@@ -64,7 +64,7 @@ let overflow = await page.evaluate(
 if (overflow) errors.push('layout overflow on active workout');
 await page.screenshot({ path: `${output}/mobile-active-workout.png`, fullPage: true });
 
-await page.getByLabel('Rapido').check();
+await page.getByLabel(/Modo rápido/).check();
 for (let index = 0; index < 10; index += 1) {
   const next = page.getByRole('button', { name: /Siguiente/ });
   if (!await next.isVisible().catch(() => false)) break;
